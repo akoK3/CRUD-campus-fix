@@ -29,6 +29,7 @@ export default function CampusMapPage() {
   const [imageOk, setImageOk] = useState<boolean | null>(null)
 
   const [selected, setSelected] = useState<number | null>(null)
+  const [hovered, setHovered] = useState<number | null>(null)
   const [placing, setPlacing] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -171,6 +172,11 @@ export default function CampusMapPage() {
                   className={`map-pin ${tone} ${selected === b.building_id ? 'active' : ''}`}
                   style={{ left: `${b.map_x}%`, top: `${b.map_y}%` }}
                   title={`${b.name} — ${b.open} open of ${b.total}`}
+                  aria-label={`${b.name}: ${b.open} open tickets, ${b.total} total tickets${b.emergency ? `, ${b.emergency} emergency` : ''}`}
+                  onMouseEnter={() => setHovered(b.building_id)}
+                  onMouseLeave={() => setHovered(null)}
+                  onFocus={() => setHovered(b.building_id)}
+                  onBlur={() => setHovered(null)}
                   onClick={(e) => {
                     e.stopPropagation()
                     setSelected(selected === b.building_id ? null : b.building_id)
@@ -178,6 +184,11 @@ export default function CampusMapPage() {
                 >
                   <span className="map-pin-count">{b.open}</span>
                   <span className="map-pin-label">{b.name}</span>
+                  {(hovered === b.building_id || selected === b.building_id) && (
+                    <span className="map-tooltip" role="status">
+                      <strong>{b.name}</strong>
+                    </span>
+                  )}
                 </button>
               )
             })}

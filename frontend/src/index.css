@@ -10,8 +10,8 @@
   --accent: #c8102e;
   --accent-soft: #fbe9ec;
   --accent-text: #ffffff;
-  --maroon: #7d1a2a;
-  --maroon-2: #9b2335;
+  --maroon: #c8102e;
+  --maroon-2: #c8102e;
   --header-bg: #c8102e;
   --header-text: #ffffff;
   --nav-bg: #111111;
@@ -36,12 +36,12 @@
     --border: #353033;
     --text: #efeaeb;
     --text-dim: #aaa0a3;
-    --accent: #ff5c72;
+    --accent: #c8102e;
     --accent-soft: #3a1a20;
     --accent-text: #1a0a0d;
-    --maroon: #8e1f31;
-    --maroon-2: #b0283d;
-    --header-bg: #7a0f20;
+    --maroon: #c8102e;
+    --maroon-2: #c8102e;
+    --header-bg: #c8102e;
     --header-text: #ffffff;
     --nav-bg: #0a0a0a;
     --nav-text: #d8d3d4;
@@ -52,7 +52,7 @@
     --ok: #6ee7b7;
     --ok-bg: #14312a;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-    --focus: 0 0 0 3px rgba(255, 92, 114, 0.25);
+    --focus: 0 0 0 3px rgba(200, 16, 46, 0.25);
     color-scheme: dark;
   }
 }
@@ -558,11 +558,47 @@ button.link:hover:not(:disabled) { background: none; text-decoration: underline;
   text-overflow: ellipsis;
 }
 
+/* Hover/focus label stays attached to the pin, so map coordinates remain accurate. */
+.map-tooltip {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  min-width: max-content;
+  max-width: 220px;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  font-size: 0.73rem;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+.map-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -5px) rotate(45deg);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.map-tooltip strong { font-size: 0.78rem; }
+
 /* On a phone the labels collide; show counts only and let the list below
    carry the names. */
 @media (max-width: 720px) {
   .map-pin-label { display: none; }
   .map-pin { padding: 0; border-width: 1.5px; }
+  .map-tooltip { font-size: 0.68rem; }
 }
 
 /* ---------- weekly columns ---------- */
