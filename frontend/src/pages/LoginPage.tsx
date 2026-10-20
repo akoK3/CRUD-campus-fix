@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { BrandMark, ErrorNote, Spinner } from '../components/ui'
 
@@ -12,7 +13,8 @@ const SUBMIT_LABEL: Record<Mode, string> = {
 
 export default function LoginPage() {
   const { signIn, signUp, requestPasswordReset } = useAuth()
-  const [mode, setMode] = useState<Mode>('signin')
+  const [searchParams] = useSearchParams()
+  const [mode, setMode] = useState<Mode>(searchParams.get('mode') === 'signup' ? 'signup' : 'signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -64,9 +66,9 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-logo">
+        <Link className="auth-logo" to="/" aria-label="Back to the CaldwellFix cover page" title="Back to home">
           <BrandMark size={64} />
-        </div>
+        </Link>
         <h1>Welcome to CampusFix</h1>
         <p className="auth-sub">Report and track campus issues at Caldwell University.</p>
 
