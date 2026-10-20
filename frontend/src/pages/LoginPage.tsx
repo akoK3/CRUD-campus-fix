@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { BrandMark, ErrorNote, Spinner } from '../components/ui'
 
@@ -66,9 +66,9 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-logo">
+        <Link className="auth-logo" to="/" aria-label="Back to the CaldwellFix cover page" title="Back to home">
           <BrandMark size={64} />
-        </div>
+        </Link>
         <h1>Welcome to CampusFix</h1>
         <p className="auth-sub">Report and track campus issues at Caldwell University.</p>
 
