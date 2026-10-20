@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useAuth } from './auth/AuthProvider'
 import { BrandMark, Loading } from './components/ui'
 import LoginPage from './pages/LoginPage'
+import CoverPage from './pages/CoverPage'
 import SubmitTicketPage from './pages/SubmitTicketPage'
 import MyTicketsPage from './pages/MyTicketsPage'
 import TicketDetailPage from './pages/TicketDetailPage'
@@ -92,8 +93,9 @@ export default function App() {
   if (!session) {
     return (
       <Routes>
+        <Route path="/" element={<CoverPage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
   }

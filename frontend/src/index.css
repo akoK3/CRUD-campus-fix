@@ -69,6 +69,41 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- public cover page ---------- */
+.cover-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background: radial-gradient(circle at 50% 35%, #fff 0, #fceff1 38%, #f5dce1 100%);
+}
+.cover-card {
+  width: min(100%, 32rem);
+  padding: clamp(2.5rem, 8vw, 4.75rem) clamp(1.75rem, 7vw, 4rem) 2rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  box-shadow: 0 22px 55px rgba(72, 20, 30, 0.16);
+  text-align: center;
+}
+.cover-logo { display: grid; place-items: center; margin-bottom: 1.3rem; }
+.cover-logo > * { border-radius: 50%; box-shadow: 0 5px 18px rgba(30, 10, 15, 0.16); }
+.cover-eyebrow { margin: 0 0 0.4rem; color: var(--accent); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+.cover-card h1 { margin: 0; font-size: clamp(2.25rem, 7vw, 3.5rem); letter-spacing: -0.065em; }
+.cover-slogan { max-width: 22rem; margin: 0.85rem auto 2.25rem; color: var(--text-dim); font-size: 1.05rem; }
+.cover-actions { display: grid; gap: 0.75rem; }
+.cover-action { display: block; width: 100%; padding: 0.8rem 1rem; border-radius: 10px; text-decoration: none; font-weight: 750; }
+.cover-action.primary { color: #fff; }
+.cover-action.secondary { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
+.cover-action.secondary:hover { background: var(--surface-2); }
+.cover-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.25rem 0.85rem; margin-top: 1.45rem; font-size: 0.82rem; }
+.cover-links a, .cover-links button { color: var(--text-dim); }
+.cover-links button { padding: 0; border: 0; background: transparent; font-size: inherit; text-decoration: underline; }
+.cover-accessibility { display: grid; gap: 0.65rem; margin-top: 1.25rem; padding: 0.85rem; border-radius: 10px; background: var(--surface-2); text-align: left; font-size: 0.82rem; }
+.cover-accessibility button { justify-self: start; padding: 0.35rem 0.6rem; }
+.cover-accessibility p { margin: 0; color: var(--text-dim); }
+:root[data-cover-text='large'] .cover-card { font-size: 1.16rem; }
+
 h1, h2, h3 { line-height: 1.25; margin: 0 0 0.5rem; }
 h1 { font-size: 1.6rem; font-weight: 750; letter-spacing: -0.02em; }
 h2 { font-size: 1.15rem; }
