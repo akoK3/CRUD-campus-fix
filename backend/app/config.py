@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = Field(default=180, gt=0)
 
     ai_confidence_threshold: float = Field(default=0.75, ge=0, le=1)
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "https://campusfizz.netlify.app,http://localhost:5173"
 
     # Email delivery of notifications. Leave SMTP_HOST blank to disable; the
     # in-app notifications work regardless.
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "CampusFix <no-reply@caldwell.edu>"
     notify_interval_seconds: int = 60
-    app_url: str = "http://localhost:5173"
+    app_url: str = "https://campusfizz.netlify.app"
 
     @property
     def email_enabled(self) -> bool:

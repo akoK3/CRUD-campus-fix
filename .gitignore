@@ -43,3 +43,6 @@ NEXT_STEPS.private.md
 backend/evaluation_results*/
 backend/archive/
 *.zip
+
+# Cloudflare account certificates and tunnel credentials stay outside Git
+.cloudflared/

@@ -15,23 +15,22 @@ const API_URL = import.meta.env.VITE_API_URL
 export async function classifyTicket(ticketId: number): Promise<void> {
   if (!API_URL) return // No backend configured — deterministic routing stands.
 
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  if (!token) return
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 8000)
-
   try {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) return
+
+    // DeepSeek cold starts and enrichment can take minutes. Submission does
+    // not await this request, so no browser-side deadline is needed.
     await fetch(`${API_URL}/api/tickets/${ticketId}/classify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      signal: controller.signal,
     })
-  } finally {
-    clearTimeout(timeout)
+  } catch {
+    // Session/network/tunnel failures cannot invalidate the saved ticket.
+    // The backend persists routing independently of receiving its response.
   }
 }

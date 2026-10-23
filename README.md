@@ -72,7 +72,10 @@ After successful routing is saved, a separate enrichment call preserves
 `original_text` and generates a cleaned `title`, `description`, and
 `ai_explanation`. Enrichment writes only those text fields. Its failure cannot
 undo routing or turn a successful classification into an API error. Ticket
-creation never depends on either model call succeeding.
+creation never depends on either model call succeeding. The frontend starts
+classification immediately after saving the ticket, without awaiting it or
+imposing a browser-side timeout. Slow inference, a cold start, or a tunnel error
+cannot turn a saved ticket into a submission failure.
 
 Classification and enrichment share `OLLAMA_URL`, `OLLAMA_MODEL` (default
 `deepseek-r1:8b`), and `OLLAMA_TIMEOUT_SECONDS` (default `180`) from `backend/.env`.
@@ -82,6 +85,31 @@ reports whether AI is configured; it does not probe whether Ollama is running.
 Run backend regression tests from `backend` with
 `python -m unittest discover -s tests -v`. These exercise the API and the real
 Supabase client against an in-memory HTTP transport, without remote writes.
+Run frontend request regression tests from `frontend` with `npm test`, followed
+by `npm run typecheck` and `npm run build`.
+
+### Netlify frontend with a local backend
+
+For `https://campusfizz.netlify.app`, use these values in the teammate machine's
+private `backend/.env`:
+
+```dotenv
+CORS_ORIGINS=https://campusfizz.netlify.app,http://localhost:5173
+APP_URL=https://campusfizz.netlify.app
+OLLAMA_URL=http://localhost:11434/api/chat
+OLLAMA_MODEL=deepseek-r1:8b
+```
+
+Expose only FastAPI at `http://127.0.0.1:8000` through Cloudflare Tunnel. Keep
+Ollama on loopback port 11434. Set Netlify's **build-time** environment variable
+`VITE_API_URL=<HTTPS tunnel URL>` and redeploy the frontend. Use the base URL
+without `/api` or a trailing slash. Supabase remains hosted as usual.
+
+Follow [the deployment guide](docs/NETLIFY_CLOUDFLARE.md) for exact PowerShell
+commands, quick versus stable named tunnels, and CORS/health verification.
+Quick tunnel hostnames change on restart and require updating Netlify plus a new
+build; named tunnels keep their configured hostname. The guide also documents
+cold-start behavior and tunnel response limits.
 
 ### Final AI holdout results
 

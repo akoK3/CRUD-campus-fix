@@ -139,6 +139,10 @@ export default function SubmitTicketPage() {
       if (ticketErr) throw ticketErr
       const ticketId = ticket.ticket_id
 
+      // Start AI immediately after saving; never await it during submission.
+      // Slow inference or an unavailable backend cannot fail a saved ticket.
+      void classifyTicket(ticketId).catch(() => undefined)
+
       // 3. Attachment. Best effort, but a failure is reported on the ticket
       //    page rather than silently dropped.
       let attachmentFailed = false
@@ -149,10 +153,6 @@ export default function SubmitTicketPage() {
           console.error('Could not upload photo:', upErr)
         }
       }
-
-      // 4. Classification. Deliberately last, deliberately swallowed.
-      //    An AI outage degrades routing quality; it never costs a ticket.
-      void classifyTicket(ticketId).catch(() => undefined)
 
       nav(`/tickets/${ticketId}`, { state: { locationFailed, attachmentFailed } })
     } catch (err) {
