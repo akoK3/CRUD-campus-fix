@@ -86,11 +86,14 @@ Write access is narrower than read access. A student may insert a ticket and upd
 4. Ticket is inserted with `status = NEW` and `ai_routing_status = PENDING`.
 5. The insert succeeds and the user receives confirmation. **This is the commit point.** Nothing after this step may cause the ticket to be lost.
 6. Classification is requested from FastAPI asynchronously.
-7. FastAPI writes back a suggested department, issue type, priority, and confidence.
-8. Confidence determines routing:
-   - at or above threshold → `ai_routing_status = AUTO_ROUTED`, status becomes `ASSIGNED`
-   - below threshold → `ai_routing_status = NEEDS_REVIEW`, status becomes `NEEDS_REVIEW`
+7. Local DeepSeek-R1 8B through Ollama predicts issue type and priority. FastAPI derives department from the taxonomy, applies the existing CampusFix exceptions, and writes the suggestions.
+8. Successful decisions use confidence `1.0` and review decisions `0.0` as compatibility flags, not calibrated probabilities:
+   - successful decision with a valid department → `ai_routing_status = AUTO_ROUTED`, status becomes `ASSIGNED`
+   - ambiguous, vague, multiple-issue, or `Other` decision → `ai_routing_status = NEEDS_REVIEW`, status becomes `NEEDS_REVIEW`
    - service unavailable or error → `ai_routing_status = FAILED`, status becomes `NEEDS_REVIEW`
+9. After routing is saved, a separate enrichment call preserves `original_text` and generates cleaned `title`, `description`, and `ai_explanation`. Enrichment failure leaves the routing decision intact. Both calls share the Ollama configuration in `app/config.py`.
+
+Emergency tickets retain their existing effective department, priority, and status across every branch. Classification and enrichment do not override these protections.
 
 All three AI outcomes leave a usable ticket in a queue a human can act on. AI failure degrades routing quality; it never costs the user their submission.
 

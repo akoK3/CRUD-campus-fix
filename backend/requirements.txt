@@ -1,10 +1,8 @@
-# Lower bounds rather than exact pins: Python 3.14 needs recent releases that
-# ship cp314 wheels. Older pins fall back to compiling pydantic-core from Rust,
-# which fails without an MSVC toolchain.
+# Python 3.11+. Use requirements.lock.txt for the verified runtime versions.
+# Recent releases also provide wheels for newer supported Python versions.
 fastapi>=0.121.0
 uvicorn[standard]>=0.38.0
 supabase>=2.24.0
-anthropic>=0.75.0
 pydantic>=2.13.0
 pydantic-settings>=2.8.0
 python-dotenv>=1.0.1

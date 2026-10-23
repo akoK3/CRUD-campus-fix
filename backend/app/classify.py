@@ -1,35 +1,20 @@
-"""AI classification.
+"""CampusFix final classifier: DeepSeek-R1 8B issue + priority."""
 
-Design rule from the project spec: AI never blocks ticket creation. By the
-time anything here runs the ticket is already committed, so every failure
-path below ends in NEEDS_REVIEW with the ticket intact.
-"""
+from __future__ import annotations
 
 import json
 import logging
+import re
+import urllib.request
 from dataclasses import dataclass
 
-import anthropic
 from supabase import Client
 
 from .config import Settings
 
 log = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You triage maintenance and support tickets for a university campus.
-
-Given a ticket, choose the single best department, issue category, and priority
-from the lists provided. Respond with JSON only, no prose.
-
-Priority guidance:
-- URGENT: safety risk, or a whole building/service is down
-- HIGH: one person blocked, or damage will worsen if left
-- MEDIUM: normal repair or request
-- LOW: cosmetic, or convenience
-
-Confidence is your honest probability that the department is correct, from 0 to 1.
-Report low confidence when the ticket is vague. A low score routes the ticket to a
-human, which is the correct outcome when you are unsure — do not inflate it."""
+_REF_CACHE = None
 
 
 @dataclass
@@ -38,105 +23,168 @@ class Classification:
     issue_type_id: int | None
     priority_id: int | None
     confidence: float
+    needs_review: bool = False
 
 
 def _reference_data(admin: Client) -> dict:
-    return {
-        "departments": (
-            admin.table("departments").select("department_id, name, description")
-            .eq("active", True).execute().data or []
-        ),
-        "issue_types": (
-            admin.table("issue_types").select("issue_type_id, name, description")
-            .execute().data or []
-        ),
-        "priorities": (
-            admin.table("priorities").select("priority_id, name, level")
-            .execute().data or []
-        ),
+    global _REF_CACHE
+    if _REF_CACHE is None:
+        _REF_CACHE = {
+            "departments": admin.table("departments").select(
+                "department_id,name,description"
+            ).eq("active", True).execute().data or [],
+            "issue_types": admin.table("issue_types").select(
+                "issue_type_id,name,description,default_department_id"
+            ).execute().data or [],
+            "priorities": admin.table("priorities").select(
+                "priority_id,name,level"
+            ).execute().data or [],
+        }
+    return _REF_CACHE
+
+def _department_id(departments, name):
+    for row in departments:
+        if row.get("name") == name:
+            return row.get("department_id")
+    return None
+
+def _classify_with_deepseek(
+    text: str, issue_names: list[str], settings: Settings
+) -> tuple[str, str]:
+    prompt = (
+        "You classify CampusFix university support tickets. "
+        "Return ONLY valid JSON: {\"issue_type\":\"...\",\"priority\":\"...\"}. "
+        "Allowed issue types: " + ", ".join(issue_names) + ". "
+        "Allowed priorities: LOW, MEDIUM, HIGH, URGENT, NEEDS_REVIEW. "
+        "LOW=minor/cosmetic inconvenience. "
+        "MEDIUM=functional problem that can wait. "
+        "HIGH=major disruption or serious near-term consequence. "
+        "URGENT=immediate credible safety/security risk, active serious damage, "
+        "active dorm lockout/access emergency, or critical large-scope outage. "
+        "NEEDS_REVIEW=too vague, multiple distinct problems, or no matching category. "
+        "Ignore emotional wording like ASAP/urgent unless facts justify it. "
+        "Real deadlines, recurrence, accessibility, and scope may raise priority. "
+        "Planned outages lower priority. "
+        "Dorm lockout/lost room key => Door / Lock + URGENT. "
+        "Vending problems => Vending."
+    )
+
+    payload = {
+        "model": settings.ollama_model,
+        "stream": False,
+        "think": False,
+        "keep_alive": "30m",
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": text},
+        ],
+        "options": {"temperature": 0},
     }
 
+    req = urllib.request.Request(
+        settings.ollama_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=settings.ollama_timeout_seconds) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    content = data["message"]["content"].strip()
+    match = re.search(r"\{.*\}", content, re.S)
+    if not match:
+        raise ValueError(f"DeepSeek returned no JSON: {content[:300]}")
+
+    obj = json.loads(match.group(0))
+    return str(obj.get("issue_type", "")).strip(), str(obj.get("priority", "")).strip()
 
 def classify(ticket: dict, admin: Client, settings: Settings) -> Classification | None:
-    """Return a classification, or None if the classifier is unavailable.
-
-    None is a normal outcome, not an exception. The caller routes to review.
-    """
     if not settings.ai_enabled:
         return None
 
-    ref = _reference_data(admin)
-
-    tool = {
-        "name": "record_classification",
-        "description": "Record the triage decision for this ticket.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "department_id": {
-                    "type": "integer",
-                    "description": "department_id from the provided list",
-                },
-                "issue_type_id": {
-                    "type": "integer",
-                    "description": "issue_type_id from the provided list",
-                },
-                "priority_id": {
-                    "type": "integer",
-                    "description": "priority_id from the provided list",
-                },
-                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                "reasoning": {"type": "string", "description": "One short sentence."},
-            },
-            "required": ["department_id", "issue_type_id", "priority_id", "confidence"],
-        },
-    }
-
-    user_content = json.dumps(
-        {
-            "ticket": {
-                "title": ticket.get("title"),
-                "description": ticket.get("description") or ticket.get("original_text"),
-            },
-            "departments": ref["departments"],
-            "issue_types": ref["issue_types"],
-            "priorities": ref["priorities"],
-        },
-        indent=2,
-    )
-
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=20.0)
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=512,
-            system=SYSTEM_PROMPT,
-            tools=[tool],
-            tool_choice={"type": "tool", "name": "record_classification"},
-            messages=[{"role": "user", "content": user_content}],
+        ref = _reference_data(admin)
+        departments = ref["departments"]
+        issue_types = ref["issue_types"]
+        priorities = ref["priorities"]
+
+        if not departments or not issue_types or not priorities:
+            return None
+
+        issue_lookup = {row["name"]: row for row in issue_types}
+        priority_lookup = {row["name"]: row for row in priorities}
+        valid_depts = {row["department_id"] for row in departments}
+
+        text = "\n".join(
+            part
+            for part in [
+                str(ticket.get("title") or "").strip(),
+                str(ticket.get("description") or ticket.get("original_text") or "").strip(),
+            ]
+            if part
         )
-    except Exception as exc:  # noqa: BLE001 - any failure means "route to a human"
-        log.warning("Classification call failed for ticket %s: %s", ticket.get("ticket_id"), exc)
-        return None
+        if not text:
+            return None
 
-    for block in response.content:
-        if block.type == "tool_use":
-            data = block.input
-            valid_departments = {d["department_id"] for d in ref["departments"]}
-            valid_types = {i["issue_type_id"] for i in ref["issue_types"]}
-            valid_priorities = {p["priority_id"] for p in ref["priorities"]}
+        issue_name, priority_name = _classify_with_deepseek(
+            text, list(issue_lookup.keys()), settings
+        )
 
-            dept = data.get("department_id")
-            itype = data.get("issue_type_id")
-            prio = data.get("priority_id")
+        if issue_name not in issue_lookup:
+            issue_name = "Other"
+        if priority_name not in {"LOW", "MEDIUM", "HIGH", "URGENT", "NEEDS_REVIEW"}:
+            priority_name = "NEEDS_REVIEW"
 
-            # Never trust a generated id. An out-of-range value becomes None,
-            # which routes to review rather than writing a bad foreign key.
+        # Any explicit review decision routes safely to Other / Review.
+        if priority_name == "NEEDS_REVIEW" or issue_name == "Other":
+            issue = issue_lookup.get("Other")
+            priority = priority_lookup.get("MEDIUM")
+            dept = _department_id(departments, "Other / Review")
+            if not issue or not priority:
+                return None
             return Classification(
-                department_id=dept if dept in valid_departments else None,
-                issue_type_id=itype if itype in valid_types else None,
-                priority_id=prio if prio in valid_priorities else None,
-                confidence=max(0.0, min(1.0, float(data.get("confidence", 0.0)))),
+                dept,
+                issue["issue_type_id"],
+                priority["priority_id"],
+                0.0,
+                True,
             )
 
-    return None
+        issue = issue_lookup[issue_name]
+        priority = priority_lookup.get(priority_name)
+        if not priority:
+            return None
+
+        dept = issue.get("default_department_id")
+
+        # Campus-specific routing exceptions.
+        if issue_name == "Vending":
+            dept = _department_id(departments, "IT")
+        elif issue_name == "Door / Lock" and re.search(
+            r"\b(?:dorm|residence|housing|room)\b.*\b(?:locked out|lost .*key)\b|"
+            r"\b(?:locked out|lost .*key)\b.*\b(?:dorm|residence|housing|room)\b",
+            text, re.I
+        ):
+            dept = _department_id(departments, "Residence Life")
+
+        if dept not in valid_depts:
+            dept = None
+
+        # DeepSeek's output is not calibrated probability.
+        # Non-review results are marked 1.0 only to preserve existing main.py routing flow.
+        return Classification(
+            dept,
+            issue["issue_type_id"],
+            priority["priority_id"],
+            1.0,
+            False,
+        )
+
+    except Exception as exc:
+        log.warning(
+            "DeepSeek classification failed for ticket %s: %s",
+            ticket.get("ticket_id"),
+            exc,
+        )
+        return None

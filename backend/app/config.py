@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,10 +18,12 @@ class Settings(BaseSettings):
     # Bypasses Row Level Security completely. Treat as root.
     supabase_service_role_key: str = ""
 
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5"
+    ai_classification_enabled: bool = True
+    ollama_url: str = "http://localhost:11434/api/chat"
+    ollama_model: str = "deepseek-r1:8b"
+    ollama_timeout_seconds: float = Field(default=180, gt=0)
 
-    ai_confidence_threshold: float = 0.75
+    ai_confidence_threshold: float = Field(default=0.75, ge=0, le=1)
     cors_origins: str = "http://localhost:5173"
 
     # Email delivery of notifications. Leave SMTP_HOST blank to disable; the
@@ -43,7 +46,12 @@ class Settings(BaseSettings):
 
     @property
     def ai_enabled(self) -> bool:
-        return bool(self.anthropic_api_key)
+        # Reports configuration, not a live Ollama availability probe.
+        return (
+            self.ai_classification_enabled
+            and self.admin_enabled
+            and bool(self.ollama_url.strip() and self.ollama_model.strip())
+        )
 
     @property
     def admin_enabled(self) -> bool:

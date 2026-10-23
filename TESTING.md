@@ -8,13 +8,16 @@ IDs cross-reference `verification.md`.
 Created for local verification only. **Delete before any real deployment** —
 see Teardown at the bottom.
 
-| Email | Role | Department | Password |
-|---|---|---|---|
-| *your own account* | SYSTEM_ADMIN | all | *yours* |
-| `fac.admin@caldwell.edu` | DEPARTMENT_ADMIN | Facilities | `TestPass123!` |
-| `fac.staff@caldwell.edu` | DEPARTMENT_STAFF | Facilities | `TestPass123!` |
-| `it.staff@caldwell.edu` | DEPARTMENT_STAFF | IT | `TestPass123!` |
-| `student2@caldwell.edu` | STUDENT | — | `TestPass123!` |
+| Email | Role | Department |
+|---|---|---|
+| *your own account* | SYSTEM_ADMIN | all |
+| `fac.admin@caldwell.edu` | DEPARTMENT_ADMIN | Facilities |
+| `fac.staff@caldwell.edu` | DEPARTMENT_STAFF | Facilities |
+| `it.staff@caldwell.edu` | DEPARTMENT_STAFF | IT |
+| `student2@caldwell.edu` | STUDENT | — |
+
+Create local test accounts through normal signup and choose separate private passwords.
+No shared test passwords are stored in this repository.
 
 Use a private window for the second account so two sessions can be open at once.
 
@@ -213,15 +216,23 @@ access internally. Anything else is a real finding.
 
 ## 9. AI classification
 
-**Without `ANTHROPIC_API_KEY`:** submit a ticket leaving category blank. The
-backend marks it `FAILED` and routes to **Needs Review**. The ticket exists and
-the user sees no error. This is V-012 and it is a release gate, not an optional
-check.
+**With local Ollama stopped or `AI_CLASSIFICATION_ENABLED=false`:** submit a
+ticket leaving category blank. The backend marks classification `FAILED` and
+routes to **Needs Review**. The ticket exists and the user sees no submission
+error. This is V-012 and remains a release gate.
 
-**With a key:** the same ticket gains a suggested department, category,
-priority and confidence. At or above 0.75 it auto-routes; below, Needs Review.
-A staff override is stored separately from the suggestion, so the original
-recommendation survives for auditing (V-010, V-011, V-013).
+**With Ollama running and `deepseek-r1:8b` available:** the model predicts issue
+type and priority. The backend derives department from the taxonomy and existing
+CampusFix exceptions. Successful decisions auto-route; vague, ambiguous,
+multiple-issue, and `Other` decisions go to **Needs Review**. The confidence
+values `1.0`/`0.0` are routing flags, not probability estimates. A staff override
+remains separate from the original suggestion (V-010, V-011, V-013).
+
+After an automatic route, verify `original_text` retains the submission and
+`title`, `description`, and `ai_explanation` contain the writing enrichment.
+If enrichment fails, routing must remain successful and the existing text must
+survive. An emergency ticket must retain its effective department, priority,
+and status regardless of classification or enrichment outcome.
 
 Stop the backend mid-test and submit again. Ticket creation is unaffected.
 

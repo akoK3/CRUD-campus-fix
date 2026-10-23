@@ -15,7 +15,8 @@ departments triage and resolve them, administrators see the patterns.
 |---|---|
 | Database, auth, storage | Supabase (PostgreSQL + Auth + Storage + RLS) |
 | Frontend | React 18 + TypeScript + Vite |
-| Backend | FastAPI (AI classification only) |
+| Backend | FastAPI (AI routing, writing enrichment, notification email) |
+| Local AI | DeepSeek-R1 8B through Ollama |
 | Authorization | **Row Level Security policies in the database** |
 
 The important architectural point: authorization is enforced by the database,
@@ -24,7 +25,7 @@ if the frontend is wrong, because Postgres refuses the row.
 
 ## Setup
 
-Requires Node 20+ and Python 3.12+.
+Requires Node 20+, Python 3.11+, and local Ollama for AI features.
 
 ### 1. Frontend
 
@@ -42,25 +43,67 @@ That is enough to run the whole product. The backend is optional.
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env and add SUPABASE_SERVICE_ROLE_KEY, and ANTHROPIC_API_KEY if you
-# want classification. Both may be left blank; the API still starts.
+# Edit .env and add SUPABASE_SERVICE_ROLE_KEY for classification.
+# The API still starts if the key is blank.
 python -m venv .venv
-./.venv/Scripts/python.exe -m pip install --only-binary=:all: -r requirements.txt
+./.venv/Scripts/python.exe -m pip install --only-binary=:all: -r requirements.txt -c requirements.lock.txt
+ollama pull deepseek-r1:8b
+# Keep Ollama running on localhost:11434 (ollama serve if needed).
 ./.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
 Check it with `curl http://localhost:8000/api/health`.
 
 Without the backend, tickets route deterministically from their issue type.
-Without `ANTHROPIC_API_KEY`, the backend routes everything to manual review.
-Neither failure can prevent a ticket being created — that is a project rule,
-not an accident.
+The backend uses local **DeepSeek-R1 8B** to predict **issue type and priority**.
+Department is derived from `issue_types.default_department_id`, with the existing
+CampusFix exceptions: Vending → IT and dorm lockout/lost room key → Residence
+Life. Taxonomy is cached in the backend process; restart it after taxonomy changes.
+
+Successful decisions with a valid department become `AUTO_ROUTED`. Vague,
+ambiguous, multiple-issue, and `Other` decisions become `NEEDS_REVIEW`.
+The existing `confidence` field carries a routing compatibility flag: `1.0`
+for successful decisions and `0.0` for review. It is not a calibrated probability.
+Model/connection failures mark classification `FAILED` and leave the ticket
+available for manual review. Emergency tickets retain their existing effective
+department, priority, and status on success, review, or failure.
+
+After successful routing is saved, a separate enrichment call preserves
+`original_text` and generates a cleaned `title`, `description`, and
+`ai_explanation`. Enrichment writes only those text fields. Its failure cannot
+undo routing or turn a successful classification into an API error. Ticket
+creation never depends on either model call succeeding.
+
+Classification and enrichment share `OLLAMA_URL`, `OLLAMA_MODEL` (default
+`deepseek-r1:8b`), and `OLLAMA_TIMEOUT_SECONDS` (default `180`) from `backend/.env`.
+Set `AI_CLASSIFICATION_ENABLED=false` to disable classification. `/api/health`
+reports whether AI is configured; it does not probe whether Ollama is running.
+
+Run backend regression tests from `backend` with
+`python -m unittest discover -s tests -v`. These exercise the API and the real
+Supabase client against an in-memory HTTP transport, without remote writes.
+
+### Final AI holdout results
+
+The frozen **62-ticket holdout** was kept separate from development and tuning.
+These are the recorded final results; cleanup does not rerun the holdout or
+modify its saved predictions.
+
+| Model | Issue type accuracy | Department accuracy | Priority accuracy |
+|---|---:|---:|---:|
+| **DeepSeek-R1 8B (final implementation)** | **82.3%** | **82.3%** | **64.5%** |
+| Qwen3 8B (comparison only) | 80.6% | 85.5% | 54.8% |
+
+These recorded measurements cover routing; they do not evaluate writing enrichment.
 
 ### 3. Database
 
-The schema is already applied to the hosted project. Migrations live in
-`supabase/migrations/` and are the source of truth. Never edit schema through
-the dashboard; write a migration.
+Migrations in `supabase/migrations/` are the source of truth. Before enabling
+writing enrichment on an existing deployment, apply the committed
+`20261023023720_ticket_ai_explanation.sql` migration through your normal migration workflow.
+It adds nullable `tickets.ai_explanation` text without changing existing reports
+or routing permissions. This synchronization does not apply migrations to the
+hosted database. Never edit schema through the dashboard.
 
 ## Campus map
 

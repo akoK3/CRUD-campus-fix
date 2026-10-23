@@ -23,6 +23,7 @@ from supabase import Client
 from .auth import Caller, admin_client, assert_can_access_ticket, current_caller
 from .classify import classify
 from .config import Settings, get_settings
+from .enrich import enrich_ticket
 from .notify import dispatch_loop, dispatch_pending
 
 logging.basicConfig(level=logging.INFO)
@@ -135,9 +136,10 @@ def classify_ticket(
     if result is None:
         # Classifier unavailable. The ticket keeps whatever department its
         # issue type gave it and a human picks up the rest.
-        admin.table("tickets").update(
-            {"ai_routing_status": "FAILED", "status_id": _status_id(admin, "NEEDS_REVIEW")}
-        ).eq("ticket_id", ticket_id).execute()
+        failure_update: dict = {"ai_routing_status": "FAILED"}
+        if not ticket.get("is_emergency"):
+            failure_update["status_id"] = _status_id(admin, "NEEDS_REVIEW")
+        admin.table("tickets").update(failure_update).eq("ticket_id", ticket_id).execute()
         return ClassifyResult(
             ticket_id=ticket_id,
             routing_status="FAILED",
@@ -145,7 +147,9 @@ def classify_ticket(
         )
 
     confident = (
-        result.confidence >= cfg.ai_confidence_threshold
+        not result.needs_review
+        and result.confidence > 0
+        and result.confidence >= cfg.ai_confidence_threshold
         and result.department_id is not None
     )
 
@@ -160,7 +164,7 @@ def classify_ticket(
         update["ai_routing_status"] = "AUTO_ROUTED"
         update["department_id"] = result.department_id
         update["priority_id"] = result.priority_id
-        if result.issue_type_id and not ticket.get("issue_type_id"):
+        if result.issue_type_id:
             update["issue_type_id"] = result.issue_type_id
         update["status_id"] = _status_id(admin, "ASSIGNED")
     else:
@@ -176,6 +180,20 @@ def classify_ticket(
 
     admin.table("tickets").update(update).eq("ticket_id", ticket_id).execute()
 
+    # Writing enrichment is intentionally separate from routing. If it fails,
+    # the classification above remains valid and the student's text is untouched.
+    if confident:
+        try:
+            enrich_ticket(
+                ticket,
+                admin,
+                issue_type_id=result.issue_type_id,
+                priority_id=result.priority_id,
+                settings=cfg,
+            )
+        except Exception as exc:
+            log.warning("Enrichment failed after routing ticket %s: %s", ticket_id, exc)
+
     return ClassifyResult(
         ticket_id=ticket_id,
         routing_status=update["ai_routing_status"],
@@ -183,7 +201,7 @@ def classify_ticket(
         priority_id=result.priority_id,
         issue_type_id=result.issue_type_id,
         confidence=round(result.confidence, 4),
-        detail="Routed automatically." if confident else "Low confidence; sent for review.",
+        detail="Routed automatically." if confident else "Classification requires manual review.",
     )
 
 

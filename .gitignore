@@ -14,6 +14,7 @@ build/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-*/
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -37,3 +38,8 @@ Thumbs.db
 
 # Private planning notes
 NEXT_STEPS.private.md
+
+# Local AI results, archives, and distribution bundles
+backend/evaluation_results*/
+backend/archive/
+*.zip
