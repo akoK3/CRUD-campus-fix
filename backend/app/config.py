@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     ai_confidence_threshold: float = Field(default=0.75, ge=0, le=1)
     cors_origins: str = "https://campusfizz.netlify.app,http://localhost:5173"
+    cors_allow_localhost: bool = True
 
     # Email delivery of notifications. Leave SMTP_HOST blank to disable; the
     # in-app notifications work regardless.
@@ -43,6 +44,13 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        # Exact HTTP loopback hosts only; Vite may select another local port.
+        if self.cors_allow_localhost:
+            return r"^http://(?:localhost|127\.0\.0\.1):[0-9]{1,5}$"
+        return None
 
     @property
     def ai_enabled(self) -> bool:

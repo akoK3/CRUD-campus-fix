@@ -20,6 +20,9 @@ import {
 } from '../lib/domain'
 import type { Tables } from '../lib/database.types'
 import { uploadAttachment, validateImage } from '../lib/attachments'
+import { startPendingTicketPolling } from '../lib/ticketPolling'
+import { onClassificationFinished } from '../lib/classify'
+import { TicketAiDetails } from '../components/TicketAiDetails'
 
 interface CommentRow extends Tables<'comments'> {
   users: { first_name: string; last_name: string } | null
@@ -56,6 +59,7 @@ export default function TicketDetailPage() {
   const [assignee, setAssignee] = useState<Person | null>(null)
   const [deptStaff, setDeptStaff] = useState<Person[]>([])
 
+  const [pollingExpired, setPollingExpired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -91,9 +95,9 @@ export default function TicketDetailPage() {
       setLoading(false)
       return
     }
-    setTicket(t)
+    setTicket((current) => current?.ticket_id === t.ticket_id ? latestTicket(current, t) : t)
 
-    const [c, h, a, r, asg, staff] = await Promise.all([
+    const [c, h, a, r, asg] = await Promise.all([
       supabase
         .from('comments')
         .select('*, users(first_name, last_name)')
@@ -118,14 +122,6 @@ export default function TicketDetailPage() {
         .eq('ticket_id', ticketId)
         .is('unassigned_at', null)
         .maybeSingle(),
-      // Staff can read department membership; for a requester RLS returns
-      // nothing, which is what they should see.
-      t.department_id
-        ? supabase
-            .from('user_departments')
-            .select('users(user_id, first_name, last_name, active)')
-            .eq('department_id', t.department_id)
-        : Promise.resolve({ data: [] }),
     ])
 
     setComments((c.data ?? []) as CommentRow[])
@@ -133,12 +129,6 @@ export default function TicketDetailPage() {
     setAttachments(a.data ?? [])
     setReopenReq(r.data ?? null)
     setAssignee((asg.data?.users as unknown as Person | null) ?? null)
-    setDeptStaff(
-      ((staff.data ?? []) as unknown as { users: (Person & { active: boolean }) | null }[])
-        .map((row) => row.users)
-        .filter((u): u is Person & { active: boolean } => !!u && u.active)
-        .sort((x, y) => x.first_name.localeCompare(y.first_name)),
-    )
 
     // Attachments live in a private bucket. Mint a short-lived signed URL
     // per object; there is no public path to these files.
@@ -161,6 +151,70 @@ export default function TicketDetailPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  const readTicket = useCallback(async (signal: AbortSignal) => {
+    const { data, error: readError } = await supabase.from('tickets').select('*')
+      .eq('ticket_id', ticketId).abortSignal(signal).maybeSingle()
+    return readError ? undefined : data
+  }, [ticketId])
+
+  useEffect(() => {
+    if (ticket?.ai_routing_status !== 'PENDING') return
+    setPollingExpired(false)
+    return startPendingTicketPolling({
+      read: readTicket,
+      onUpdate: (next) => setTicket((current) => latestTicket(current, next)),
+      onExpire: () => setPollingExpired(true),
+    })
+  }, [readTicket, ticket?.ai_routing_status])
+
+  useEffect(() => {
+    // Routing is persisted before enrichment. One final read after the POST
+    // ends picks up polished text even if pending polling has already stopped.
+    let active = true
+    let controller: AbortController | undefined
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    const unsubscribe = onClassificationFinished((finishedId) => {
+      if (finishedId !== ticketId) return
+      controller?.abort()
+      clearTimeout(deadline)
+      const requestController = new AbortController()
+      controller = requestController
+      const timeout = setTimeout(() => requestController.abort(), 15000)
+      deadline = timeout
+      void readTicket(requestController.signal).then((next) => {
+        if (active && next) setTicket((current) => latestTicket(current, next))
+      }).catch(() => undefined).finally(() => clearTimeout(timeout))
+    })
+    return () => {
+      active = false
+      unsubscribe()
+      clearTimeout(deadline)
+      controller?.abort()
+    }
+  }, [readTicket, ticketId])
+
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
+    const departmentId = ticket?.department_id
+    setDeptStaff([])
+    if (departmentId) {
+      void supabase.from('user_departments')
+        .select('users(user_id, first_name, last_name, active)')
+        .eq('department_id', departmentId).abortSignal(controller.signal)
+        .then(({ data }) => {
+          if (!active) return
+          setDeptStaff(
+            ((data ?? []) as unknown as { users: (Person & { active: boolean }) | null }[])
+              .map((row) => row.users)
+              .filter((u): u is Person & { active: boolean } => !!u && u.active)
+              .sort((x, y) => x.first_name.localeCompare(y.first_name)),
+          )
+        }, () => undefined)
+    }
+    return () => { active = false; controller.abort() }
+  }, [ticket?.department_id, ticketId])
 
   const statusName = useMemo(
     () => (ticket ? statusNameById(lookups, ticket.status_id) : null),
@@ -367,6 +421,7 @@ export default function TicketDetailPage() {
           {nameById(lookups.issueTypes, 'issue_type_id', ticket.issue_type_id) ??
             'Uncategorised'}
         </span>
+        <span className="badge">Routing: {humanize(ticket.ai_routing_status)}</span>
         <span className="small muted">Opened {formatRelative(ticket.created_at)}</span>
         {isStaff && (
           <span className="small muted">
@@ -388,6 +443,14 @@ export default function TicketDetailPage() {
         <div className="alert warn">
           The ticket was created, but the photo could not be uploaded. You can describe it in a
           comment, or file the photo again later.
+        </div>
+      )}
+
+      {ticket.ai_routing_status === 'PENDING' && (
+        <div className="alert" role="status">
+          {pollingExpired
+            ? 'Your ticket is saved. Automatic refresh paused after six minutes; reload the page to check the latest routing.'
+            : 'Your ticket is saved. Classification is in progress; this page will update automatically.'}
         </div>
       )}
 
@@ -475,6 +538,8 @@ export default function TicketDetailPage() {
           </>
         )}
       </div>
+
+      <TicketAiDetails ticket={ticket} isStaff={isStaff} />
 
       {(attachments.length > 0 || isOpen) && (
         <div className="card">
@@ -786,4 +851,12 @@ function LocationLine({ locationId }: { locationId: number }) {
       })
   }, [locationId])
   return <>{text}</>
+}
+
+// Ignore older background responses and responses for a previous route. Only
+// the ticket snapshot changes; drafts and action controls keep their state.
+function latestTicket(current: Tables<'tickets'> | null, next: Tables<'tickets'>) {
+  if (!current) return next
+  if (current.ticket_id !== next.ticket_id) return current
+  return Date.parse(next.updated_at) >= Date.parse(current.updated_at) ? next : current
 }

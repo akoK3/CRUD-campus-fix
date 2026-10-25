@@ -33,7 +33,7 @@ Requires Node 20+, Python 3.11+, and local Ollama for AI features.
 cd frontend
 cp .env.example .env     # values are already filled in; none are secret
 npm install
-npm run dev              # http://localhost:5173
+npm run dev              # open the Vite URL printed (usually 5173 or 5174)
 ```
 
 That is enough to run the whole product. The backend is optional.
@@ -87,6 +87,21 @@ Run backend regression tests from `backend` with
 Supabase client against an in-memory HTTP transport, without remote writes.
 Run frontend request regression tests from `frontend` with `npm test`, followed
 by `npm run typecheck` and `npm run build`.
+
+### Local presentation
+
+Use [the local demo guide](docs/LOCAL_DEMO.md) for the exact three-terminal
+workflow, environment checks, sample ticket, and troubleshooting. Locally set
+`VITE_API_URL=http://localhost:8000`. Restricted loopback CORS supports both
+localhost and 127.0.0.1 on Vite development ports, including 5173 and 5174.
+Restart the backend to load the change; no port-by-port CORS edit is needed.
+
+The ticket page polls only its ticket row every three seconds while routing is
+pending, with a six-minute ceiling and cleanup on navigation. It stops on a
+completed routing status. A final refresh when the submitting tab's POST finishes
+picks up separate enrichment. The stored AI routing explanation is displayed;
+staff can expand original student text when it differs from the polished version.
+Drafts and action forms remain intact. Model/policy and frozen benchmarks are unchanged.
 
 ### Netlify frontend with a local backend
 

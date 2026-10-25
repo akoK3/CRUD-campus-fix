@@ -317,6 +317,36 @@ class RoutingAPITests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
+    def test_5174_preflight_then_authenticated_classification(self):
+        origin = "http://localhost:5174"
+        preflight = self.http.options("/api/tickets/1/classify", headers={
+            "Origin": origin, "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        })
+        self.assertEqual(preflight.status_code, 200, preflight.text)
+        self.assertEqual(preflight.headers["access-control-allow-origin"], origin)
+        self.predict.assert_not_called()
+
+        # Exercise the real authentication dependency. Only the remote Auth
+        # service and database transport are mocked; no real tokens or writes.
+        main.app.dependency_overrides.pop(current_caller)
+        self.db.rows["users"] = [{"user_id": "student-1", "email": "student@caldwell.edu",
+                                 "active": True, "roles": {"name": "STUDENT"}}]
+        self.db.rows["user_departments"] = []
+        anon = MagicMock()
+        anon.auth.get_user.return_value.user.id = "student-1"
+        with patch("app.auth.create_client", side_effect=[anon, self.db.client]):
+            response = self.http.post("/api/tickets/1/classify", headers={
+                "Origin": origin, "Authorization": "Bearer test-user-session",
+                "Content-Type": "application/json",
+            })
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers["access-control-allow-origin"], origin)
+        self.assertEqual(response.json()["routing_status"], "AUTO_ROUTED")
+        anon.auth.get_user.assert_called_once_with("test-user-session")
+        self.predict.assert_called_once()
+        self.assertEqual(self.http.post("/api/tickets/1/classify", headers={"Origin": origin}).status_code, 401)
+
     def test_success_auto_routes_and_persists_effective_and_suggested_values(self):
         body = self.classify()
         self.assertEqual(body["routing_status"], "AUTO_ROUTED")

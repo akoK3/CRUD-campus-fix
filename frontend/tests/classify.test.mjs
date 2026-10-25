@@ -45,6 +45,7 @@ function loadClassifier({
   })
   return {
     classifyTicket: exports.classifyTicket,
+    onClassificationFinished: exports.onClassificationFinished,
     advanceTime(milliseconds) {
       now += milliseconds
       for (const [id, timer] of timers) {
@@ -150,4 +151,35 @@ test('a proxy timeout response cannot reject the submission follow-up', async ()
   })
   await assert.doesNotReject(classifyTicket(42))
   assert.equal(requests, 1)
+})
+
+
+test('completion observers run after the full POST, including enrichment', { timeout: 2000 }, async () => {
+  let finish
+  let notifyStarted
+  const started = new Promise((resolve) => { notifyStarted = resolve })
+  const { classifyTicket, onClassificationFinished } = loadClassifier({
+    fetch: () => new Promise((resolve) => { finish = resolve; notifyStarted() }),
+  })
+  const events = []
+  const unsubscribe = onClassificationFinished((id) => events.push(id))
+  const request = classifyTicket(42)
+  await started
+  assert.deepEqual(events, [])
+  finish({ status: 200 })
+  await request
+  assert.deepEqual(events, [42])
+  unsubscribe()
+})
+
+test('completion listeners unsubscribe and cannot cause a false submission failure', async () => {
+  const { classifyTicket, onClassificationFinished } = loadClassifier()
+  let calls = 0
+  const unsubscribe = onClassificationFinished(() => { calls += 1 })
+  onClassificationFinished(() => { throw new Error('UI failure') })
+  await assert.doesNotReject(classifyTicket(42))
+  assert.equal(calls, 1)
+  unsubscribe()
+  await assert.doesNotReject(classifyTicket(42))
+  assert.equal(calls, 1)
 })

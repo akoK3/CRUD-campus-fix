@@ -41,6 +41,7 @@ SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
 SUPABASE_SERVICE_ROLE_KEY=YOUR_PRIVATE_SERVER_KEY
 AI_CLASSIFICATION_ENABLED=true
 CORS_ORIGINS=https://campusfizz.netlify.app,http://localhost:5173
+CORS_ALLOW_LOCALHOST=true
 APP_URL=https://campusfizz.netlify.app
 OLLAMA_URL=http://localhost:11434/api/chat
 OLLAMA_MODEL=deepseek-r1:8b
@@ -52,7 +53,12 @@ passwords, or tunnel credentials. No server key belongs in a `VITE_*` variable.
 `APP_URL` is the frontend URL for ticket links, not the tunnel URL. CORS contains
 frontend origins, not API paths or tunnel URLs. Use exact origins without a
 trailing slash; Netlify preview domains need separate explicit entries if used.
-Restart FastAPI after changing its environment.
+Restart FastAPI after changing its environment or backend code. The restricted
+loopback regex also accepts HTTP localhost/127.0.0.1 development ports such as
+5174, so Vite port changes need no new allowlist entry. `CORS_ALLOW_LOCALHOST`
+defaults to true; for a production-only API, set it false and remove explicit
+local origins while retaining the exact Netlify origin. No wildcard is used.
+See [the local presentation workflow](LOCAL_DEMO.md) for a demo without a tunnel.
 
 ## 2. Start Ollama locally
 
@@ -200,13 +206,13 @@ On a machine with Internet access, replace the base URL below:
 ```powershell
 $apiBase = "https://YOUR_ACTUAL_TUNNEL_HOSTNAME"
 Invoke-RestMethod "$apiBase/api/health"
-foreach ($origin in @("https://campusfizz.netlify.app", "http://localhost:5173")) {
+foreach ($origin in @("https://campusfizz.netlify.app", "http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174")) {
   curl.exe -i -X OPTIONS "$apiBase/api/tickets/1/classify" -H "Origin: $origin" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: authorization,content-type"
 }
 curl.exe -i -X POST "$apiBase/api/tickets/1/classify"
 ```
 
-Both preflights should return 200 with `Access-Control-Allow-Origin` equal to
+All five preflights should return 200 with `Access-Control-Allow-Origin` equal to
 the requested allowed origin and permission for authorization/content-type.
 The unauthenticated POST should return 401 and must not classify a ticket.
 Then sign in at `https://campusfizz.netlify.app` and submit a test ticket. Browser
@@ -228,7 +234,10 @@ enrichment failure cannot undo it. The existing 180-second Ollama timeout
 applies to each model call, not to ticket creation. This remains a best-effort
 browser trigger, not a durable job queue: closing the browser before the
 request reaches FastAPI can prevent classification. Keep the tab open for the
-initial request and refresh the ticket later to see persisted AI updates.
+initial request. The ticket page polls while routing is pending (bounded to six
+minutes) and stops at completion. In the submitting tab, one final refresh when
+the POST finishes picks up enrichment; the stored AI explanation is displayed.
+Staff can expand a separate original-submission comparison when fields differ.
 
 ## References
 
