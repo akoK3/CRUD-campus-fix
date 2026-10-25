@@ -18,6 +18,7 @@ import {
   UNSPECIFIED_FLOOR,
 } from '../lib/domain'
 import { classifyTicket } from '../lib/classify'
+import { submissionText } from '../lib/submission'
 import { formatBytes } from '../lib/format'
 
 export default function SubmitTicketPage() {
@@ -125,9 +126,7 @@ export default function SubmitTicketPage() {
         .from('tickets')
         .insert({
           reported_by: profile.user_id,
-          original_text: description.trim(),
-          title: title.trim(),
-          description: description.trim(),
+          ...submissionText(title, description),
           issue_type_id: issueTypeId ? Number(issueTypeId) : null,
           location_id: locationId,
           status_id: newStatus,
@@ -244,8 +243,8 @@ export default function SubmitTicketPage() {
             ))}
           </select>
           <div className="hint">
-            Picking a category routes your ticket immediately. Leaving it blank sends it for
-            review.
+            Choose a category if you know it, or leave it blank for CampusFix to classify.
+            Unclear reports may need staff review.
           </div>
         </div>
 

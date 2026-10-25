@@ -1,0 +1,5 @@
+# Optional historical inference evaluator only. Offline scoring needs no packages.
+# Install separately from the backend; these are a pinned replay environment,
+# not a claim that original inference package versions were recorded.
+pandas==3.0.6
+scikit-learn==1.9.1

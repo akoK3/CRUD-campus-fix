@@ -1,0 +1,63 @@
+case_id,expected_issue_type,expected_department,expected_priority,pred_issue_type,pred_department,pred_priority,latency_seconds
+CFB-0004,Plumbing,Facilities,URGENT,Residence Maintenance,Residence Life,URGENT,23.797823200002313
+CFB-0005,Plumbing,Facilities,MEDIUM,Plumbing,Facilities,LOW,10.891432000003988
+CFB-0006,Plumbing,Facilities,LOW,Plumbing,Facilities,MEDIUM,38.6691281000094
+CFB-0010,Electrical,Facilities,URGENT,Electrical,Facilities,URGENT,8.75284709999687
+CFB-0011,Electrical,Facilities,LOW,Electrical,Facilities,MEDIUM,22.738359799986938
+CFB-0013,Heating / Cooling,Facilities,LOW,Heating / Cooling,Facilities,LOW,9.93598920002114
+CFB-0022,Lighting,Facilities,URGENT,Lighting,Facilities,URGENT,10.528219600004377
+CFB-0028,Furniture,Facilities,URGENT,Furniture,Facilities,URGENT,35.262370600015856
+CFB-0030,Furniture,Facilities,MEDIUM,Furniture,Facilities,HIGH,7.663759999995818
+CFB-0043,Structural,Facilities,LOW,Other,Other / Review,LOW,26.106158799986588
+CFB-0045,Structural,Facilities,HIGH,Residence Maintenance,Residence Life,HIGH,25.272119999979623
+CFB-0046,Structural,Facilities,URGENT,Structural,Facilities,URGENT,16.12809610000113
+CFB-0052,Cleaning / Custodial,Facilities,URGENT,Safety Hazard,Campus Safety,URGENT,8.245154700009152
+CFB-0053,Cleaning / Custodial,Facilities,HIGH,Cleaning / Custodial,Facilities,MEDIUM,24.268012999993516
+CFB-0061,Elevator,Facilities,LOW,Elevator,Facilities,LOW,16.84489190002205
+CFB-0062,Elevator,Facilities,MEDIUM,Elevator,Facilities,HIGH,38.63595159997931
+CFB-0067,Wi-Fi / Network,IT,LOW,Wi-Fi / Network,IT,LOW,11.158468499983428
+CFB-0073,Classroom Technology,IT,LOW,Cleaning / Custodial,Facilities,LOW,21.786540600005537
+CFB-0074,Classroom Technology,IT,MEDIUM,Classroom Technology,IT,MEDIUM,20.315142000006745
+CFB-0079,Computer / Hardware,IT,LOW,Computer / Hardware,IT,MEDIUM,18.412448499992024
+CFB-0080,Computer / Hardware,IT,MEDIUM,Computer / Hardware,IT,HIGH,36.86714230000507
+CFB-0082,Computer / Hardware,IT,URGENT,Computer / Hardware,IT,URGENT,9.213871400017524
+CFB-0085,Account / Login,IT,LOW,Account / Login,IT,MEDIUM,19.78140930001973
+CFB-0096,Software,IT,LOW,Software,IT,MEDIUM,15.053152099979343
+CFB-0104,Residence Maintenance,Residence Life,MEDIUM,Plumbing,Facilities,HIGH,11.28518969999277
+CFB-0105,Residence Maintenance,Residence Life,HIGH,Residence Maintenance,Residence Life,HIGH,13.351208899985068
+CFB-0107,Residence Maintenance,Residence Life,HIGH,Plumbing,Facilities,HIGH,35.354796100000385
+CFB-0113,Housing / Roommate,Residence Life,HIGH,Housing / Roommate,Residence Life,HIGH,29.68142649999936
+CFB-0120,Laundry,Residence Life,LOW,Laundry,Residence Life,MEDIUM,20.761078700015787
+CFB-0121,Event Support,Student Engagement,LOW,Event Support,Student Engagement,MEDIUM,7.226490000000922
+CFB-0123,Event Support,Student Engagement,HIGH,Event Support,Student Engagement,HIGH,8.87299190001795
+CFB-0124,Event Support,Student Engagement,URGENT,Event Support,Student Engagement,URGENT,30.248002899985295
+CFB-0125,Event Support,Student Engagement,HIGH,Event Support,Student Engagement,HIGH,29.912426900002174
+CFB-0126,Event Support,Student Engagement,LOW,Other,Other / Review,LOW,10.63921819999814
+CFB-0127,Club / Organization,Student Engagement,LOW,Club / Organization,Student Engagement,MEDIUM,9.708531100011896
+CFB-0129,Club / Organization,Student Engagement,HIGH,Club / Organization,Student Engagement,HIGH,27.15066780001507
+CFB-0133,Parking,Campus Safety,LOW,Parking,Campus Safety,LOW,6.05015560000902
+CFB-0135,Parking,Campus Safety,HIGH,Parking,Campus Safety,HIGH,9.653710999991745
+CFB-0150,Safety Hazard,Campus Safety,URGENT,Electrical,Facilities,URGENT,10.6824714000104
+CFB-0153,Lost and Found,Campus Safety,HIGH,Lost and Found,Campus Safety,HIGH,17.369444200012367
+CFB-0160,Security Concern,Campus Safety,URGENT,Security Concern,Campus Safety,URGENT,21.62037279998185
+CFB-0162,Security Concern,Campus Safety,URGENT,Security Concern,Campus Safety,URGENT,31.21541839998099
+CFB-0166,Dining Service,Dining,URGENT,Dining Service,Dining,URGENT,9.039362700015772
+CFB-0169,Meal Plan,Dining,LOW,Meal Plan,Dining,LOW,8.282653400005074
+CFB-0185,Billing,Finance,MEDIUM,Billing,Finance,MEDIUM,20.40974030000507
+CFB-0188,Financial Aid,Finance,MEDIUM,Account / Login,IT,HIGH,9.73519999999553
+CFB-0197,Other,Other / Review,NEEDS_REVIEW,Account / Login,IT,MEDIUM,12.359657299995888
+CFB-0199,Wi-Fi / Network,IT,NEEDS_REVIEW,Wi-Fi / Network,IT,MEDIUM,7.014396500017028
+CFB-0200,Printing,IT,NEEDS_REVIEW,Printing,IT,MEDIUM,19.06899049997446
+CFB-0201,Door / Lock,Facilities,NEEDS_REVIEW,Door / Lock,Facilities,NEEDS_REVIEW,12.463804099999834
+CFB-0202,Account / Login,IT,NEEDS_REVIEW,Account / Login,IT,MEDIUM,44.15278709999984
+CFB-0209,Lighting,Facilities,LOW,Lighting,Facilities,MEDIUM,42.57125909999013
+CFB-0210,Electrical,Facilities,URGENT,Electrical,Facilities,URGENT,24.095244899974205
+CFB-0211,Security Concern,Campus Safety,URGENT,Security Concern,Campus Safety,URGENT,23.590907299978426
+CFB-0218,Wi-Fi / Network,IT,MEDIUM,Wi-Fi / Network,IT,MEDIUM,18.157500000001164
+CFB-0221,Classroom Technology,IT,HIGH,Classroom Technology,IT,URGENT,9.808355599991046
+CFB-0222,Elevator,Facilities,HIGH,Elevator,Facilities,HIGH,13.00487350000185
+CFB-0223,Door / Lock,Facilities,HIGH,Door / Lock,Facilities,URGENT,35.27247070000158
+CFB-0227,ID Card,Campus Safety,MEDIUM,ID Card,Campus Safety,MEDIUM,26.065978299971903
+CFB-0239,ID Card,Campus Safety,MEDIUM,ID Card,Campus Safety,MEDIUM,12.376960199995665
+CFB-0243,Parking,Campus Safety,URGENT,Parking,Campus Safety,URGENT,15.935962999996264
+CFB-0249,Plumbing,Facilities,HIGH,Plumbing,Facilities,HIGH,30.156677899998613

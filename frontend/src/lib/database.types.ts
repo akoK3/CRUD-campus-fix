@@ -383,6 +383,7 @@ export type Database = {
       tickets: {
         Row: {
           ai_confidence: number | null
+          ai_explanation: string | null
           ai_routing_status: string
           ai_suggested_department_id: number | null
           ai_suggested_issue_type_id: number | null
@@ -396,6 +397,7 @@ export type Database = {
           issue_type_id: number | null
           location_id: number | null
           original_text: string
+          original_title: string | null
           priority_id: number | null
           reported_by: string
           resolution_notes: string | null
@@ -407,6 +409,7 @@ export type Database = {
         }
         Insert: {
           ai_confidence?: number | null
+          ai_explanation?: string | null
           ai_routing_status?: string
           ai_suggested_department_id?: number | null
           ai_suggested_issue_type_id?: number | null
@@ -420,6 +423,7 @@ export type Database = {
           issue_type_id?: number | null
           location_id?: number | null
           original_text: string
+          original_title?: string | null
           priority_id?: number | null
           reported_by: string
           resolution_notes?: string | null
@@ -431,6 +435,7 @@ export type Database = {
         }
         Update: {
           ai_confidence?: number | null
+          ai_explanation?: string | null
           ai_routing_status?: string
           ai_suggested_department_id?: number | null
           ai_suggested_issue_type_id?: number | null
@@ -444,6 +449,7 @@ export type Database = {
           issue_type_id?: number | null
           location_id?: number | null
           original_text?: string
+          original_title?: string | null
           priority_id?: number | null
           reported_by?: string
           resolution_notes?: string | null

@@ -46,3 +46,7 @@ backend/archive/
 
 # Cloudflare account certificates and tunnel credentials stay outside Git
 .cloudflared/
+
+# Fresh evaluation runs are not part of the frozen benchmark
+evaluation/evaluation_results_holdout/
+evaluation/runs/

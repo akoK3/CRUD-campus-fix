@@ -2,7 +2,7 @@
 
 Separate from routing/classification:
 - routing stays valid even if enrichment fails
-- original_text preserves the student's raw wording
+- original_title and original_text preserve the student's submitted wording
 - title/description are polished for staff readability
 """
 
@@ -143,6 +143,8 @@ def enrich_ticket(
 
         polished = _generate(raw_text, issue_name, priority_name, settings or get_settings())
 
+        # original_title is captured on creation and is never an AI write target.
+        # Legacy nulls remain null; a polished title is not a historical original.
         update = {
             "original_text": raw_text,
             "title": polished["title"],

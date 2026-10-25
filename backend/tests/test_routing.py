@@ -75,6 +75,7 @@ class Database:
                 "ticket_id": 1,
                 "reported_by": "student-1",
                 "title": "Bathroom sink leaking",
+                "original_title": "  sink pipe dripping!!!  ",
                 "description": "Water drips from the sink pipe under the basin.",
                 "original_text": "  My bathroom sink pipe keeps dripping.  \n",
                 "ai_routing_status": "PENDING",
@@ -227,13 +228,38 @@ class EnrichmentTests(unittest.TestCase):
 
     def test_preserves_original_text_exactly_and_only_updates_text_fields(self):
         original = self.db.ticket["original_text"]
+        original_title = self.db.ticket["original_title"]
         with patch.object(enrich, "_generate", return_value=self.polished) as generate:
             self.assertTrue(self.enrich())
         self.assertEqual(self.db.ticket["original_text"], original)
+        self.assertEqual(self.db.ticket["original_title"], original_title)
+        self.assertEqual(self.db.ticket["title"], self.polished["title"])
+        self.assertNotIn("original_title", self.db.updates[-1][1])
         self.assertEqual(generate.call_args.args, (original, "Plumbing", "MEDIUM", self.cfg))
         self.assertEqual(set(self.db.updates[-1][1]), {"original_text", "title", "description", "ai_explanation"})
         self.assertEqual(self.db.ticket["ai_explanation"], self.polished["explanation"])
         self.assertEqual(self.db.ticket["status_id"], 20)
+
+    def test_repeated_enrichment_never_writes_original_title(self):
+        original_title = self.db.ticket["original_title"]
+        result = dict(self.polished, original_title="Model must not replace this")
+        with patch.object(enrich, "_generate", return_value=result):
+            self.assertTrue(self.enrich())
+            self.assertTrue(self.enrich())
+        self.assertEqual(self.db.ticket["original_title"], original_title)
+        self.assertTrue(all("original_title" not in update for _, update in self.db.updates))
+
+    def test_legacy_missing_or_null_original_title_remains_valid(self):
+        for present in (False, True):
+            with self.subTest(present=present):
+                self.db.ticket.pop("original_title", None)
+                if present:
+                    self.db.ticket["original_title"] = None
+                with patch.object(enrich, "_generate", return_value=self.polished):
+                    self.assertTrue(self.enrich())
+                self.assertIsNone(self.db.ticket.get("original_title"))
+                self.assertEqual("original_title" in self.db.ticket, present)
+                self.assertNotIn("original_title", self.db.updates[-1][1])
 
     def test_generates_original_text_when_missing(self):
         self.db.ticket.pop("original_text")
@@ -312,6 +338,7 @@ class RoutingAPITests(unittest.TestCase):
             model_response({"title": "Leaking bathroom sink", "description": "The sink pipe drips.", "explanation": "A plumbing issue disrupts use."}),
         ]
         original = self.db.ticket["original_text"]
+        original_title = self.db.ticket["original_title"]
         with patch.object(routing.urllib.request, "urlopen", side_effect=responses) as send:
             body = self.classify()
         self.assertEqual(body["routing_status"], "AUTO_ROUTED")
@@ -319,6 +346,7 @@ class RoutingAPITests(unittest.TestCase):
         self.assertEqual(set(self.db.updates[1][1]), {"original_text", "title", "description", "ai_explanation"})
         self.assertEqual(self.db.ticket["original_text"], original)
         self.assertEqual(self.db.ticket["title"], "Leaking bathroom sink")
+        self.assertEqual(self.db.ticket["original_title"], original_title)
         for call in send.call_args_list:
             self.assertEqual(json.loads(call.args[0].data)["model"], self.cfg.ollama_model)
             self.assertEqual(call.args[0].full_url, self.cfg.ollama_url)

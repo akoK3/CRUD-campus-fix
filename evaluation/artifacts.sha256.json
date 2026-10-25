@@ -1,0 +1,6 @@
+{
+  "campusfix_benchmark_v2.csv": "31d5216f6644b98fec6654c05dd5a839cb0e7220f4aab182415cc44d257ce87a",
+  "evaluate_holdout_models.py": "309817ddbcc31e086d94f20fe3feafe5ccf1b91c19d67904280d9800f99cf8cf",
+  "frozen/deepseek-r1_8b_holdout_predictions.csv": "f46ca959234acd67176ccb5180fc3b1fcabbe5a841f088819990bed13394ead8",
+  "frozen/qwen3_8b_holdout_predictions.csv": "d37cff559e41d177eb8de7a5ed4ae2bdf1fa658446fbb1a4b937367f563f31a3"
+}

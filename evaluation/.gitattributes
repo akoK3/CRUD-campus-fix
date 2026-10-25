@@ -1,0 +1,5 @@
+# Preserve the source artifacts byte-for-byte, including their original CRLF.
+# Treat CRLF as a line ending during diff checks without relaxing other checks.
+campusfix_benchmark_v2.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+evaluate_holdout_models.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+frozen/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

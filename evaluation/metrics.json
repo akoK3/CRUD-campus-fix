@@ -1,0 +1,57 @@
+{
+  "case_count": 249,
+  "models": {
+    "deepseek-r1:8b": {
+      "department": {
+        "accuracy": 0.8225806451612904,
+        "correct": 51,
+        "macro_f1": 0.7246017871017871,
+        "total": 62
+      },
+      "issue_type": {
+        "accuracy": 0.8225806451612904,
+        "correct": 51,
+        "macro_f1": 0.8070899470899471,
+        "total": 62
+      },
+      "latency": {
+        "mean_seconds": 19.365723788708678,
+        "median_seconds": 17.763472100006766
+      },
+      "priority": {
+        "accuracy": 0.6451612903225806,
+        "correct": 40,
+        "macro_f1": 0.5905769230769231,
+        "total": 62
+      }
+    },
+    "qwen3:8b": {
+      "department": {
+        "accuracy": 0.8548387096774194,
+        "correct": 53,
+        "macro_f1": 0.7652906304222094,
+        "total": 62
+      },
+      "issue_type": {
+        "accuracy": 0.8064516129032258,
+        "correct": 50,
+        "macro_f1": 0.8014646464646464,
+        "total": 62
+      },
+      "latency": {
+        "mean_seconds": 2.7073225161274745,
+        "median_seconds": 2.5256664999906207
+      },
+      "priority": {
+        "accuracy": 0.5483870967741935,
+        "correct": 34,
+        "macro_f1": 0.4421613806813047,
+        "total": 62
+      }
+    }
+  },
+  "split_counts": {
+    "development": 187,
+    "holdout": 62
+  }
+}

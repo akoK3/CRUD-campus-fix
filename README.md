@@ -69,9 +69,9 @@ available for manual review. Emergency tickets retain their existing effective
 department, priority, and status on success, review, or failure.
 
 After successful routing is saved, a separate enrichment call preserves
-`original_text` and generates a cleaned `title`, `description`, and
-`ai_explanation`. Enrichment writes only those text fields. Its failure cannot
-undo routing or turn a successful classification into an API error. Ticket
+the verbatim `original_title` and `original_text` snapshots and generates a
+cleaned `title`, `description`, and `ai_explanation`. Enrichment writes only
+those text fields. Its failure cannot undo routing or turn a successful classification into an API error. Ticket
 creation never depends on either model call succeeding. The frontend starts
 classification immediately after saving the ticket, without awaiting it or
 imposing a browser-side timeout. Slow inference, a cold start, or a tunnel error
@@ -123,6 +123,19 @@ modify its saved predictions.
 | Qwen3 8B (comparison only) | 80.6% | 85.5% | 54.8% |
 
 These recorded measurements cover routing; they do not evaluate writing enrichment.
+The [evaluation archive](evaluation/README.md) includes the exact 249-case dataset
+(187 development / 62 holdout), historical comparison evaluator, both frozen
+prediction files, hashes, and accuracy/F1/latency results. Reproduce the metrics
+without model calls or dependencies from the repository root:
+
+```bash
+python evaluation/reproduce_metrics.py --check
+```
+
+The holdout was used once for final model selection and must not be used for
+future tuning or inference comparisons. See the [frozen pre-RAG baseline](docs/AI_BASELINE.md)
+for architecture, limits, configuration, original-submission preservation, and
+the evaluation freeze policy. No holdout inference was rerun for this freeze.
 
 ### 3. Database
 
@@ -130,8 +143,11 @@ Migrations in `supabase/migrations/` are the source of truth. Before enabling
 writing enrichment on an existing deployment, apply the committed
 `20261023023720_ticket_ai_explanation.sql` migration through your normal migration workflow.
 It adds nullable `tickets.ai_explanation` text without changing existing reports
-or routing permissions. This synchronization does not apply migrations to the
-hosted database. Never edit schema through the dashboard.
+or routing permissions. Also apply `20261025203513_ticket_original_title.sql`
+before deploying this frontend: it adds nullable `tickets.original_title`,
+captures titles on insert, and protects the original on later updates. Existing
+rows remain null rather than copying an already-polished title. This work does
+not apply migrations to the hosted database. Never edit schema through the dashboard.
 
 ## Campus map
 

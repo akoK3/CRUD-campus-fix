@@ -78,6 +78,11 @@ jobs:
       - name: Routing regression tests
         run: python -m unittest discover -s tests -v
 
+      - name: Frozen benchmark integrity and offline metrics
+        run: |
+          python ../evaluation/reproduce_metrics.py --check
+          python -m unittest discover -s ../evaluation -v
+
       - name: Smoke test the API
         # No real credentials. The service starts and reports its own degraded
         # state rather than crashing — that behaviour is the thing being tested.
