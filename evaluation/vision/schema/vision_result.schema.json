@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "campusfix/vision_result/1.0",
+  "title": "CampusFix Claude Vision analysis result",
+  "description": "One structured analysis of 1..N photos attached to a campus issue report. Uses only keywords supported by Claude structured outputs (no numeric/string length constraints, additionalProperties false everywhere).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "outcome", "abstain_reason", "issue_type", "confidence", "summary",
+    "image_assessments", "evidence", "visible_hazards", "safety_escalation_suggested",
+    "visible_text", "cross_image_consistency", "uncertainties"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["1.0"]},
+    "outcome": {
+      "type": "string",
+      "enum": ["issue_identified", "no_issue_visible", "abstain"],
+      "description": "issue_identified only when the photos show a specific campus issue; abstain when the photos cannot support a conclusion."
+    },
+    "abstain_reason": {
+      "anyOf": [
+        {"type": "string", "enum": ["too_blurry", "too_dark", "obstructed", "insufficient_detail", "ambiguous", "outside_taxonomy", "conflicting_images"]},
+        {"type": "null"}
+      ]
+    },
+    "issue_type": {
+      "anyOf": [
+        {"type": "string", "enum": [
+          "Plumbing", "Electrical", "Heating / Cooling", "Lighting", "Furniture", "Door / Lock", "Window",
+          "Structural", "Cleaning / Custodial", "Pest Control", "Elevator", "Wi-Fi / Network",
+          "Classroom Technology", "Computer / Hardware", "Account / Login", "Software", "Printing",
+          "Residence Maintenance", "Housing / Roommate", "Laundry", "Event Support", "Club / Organization",
+          "Parking", "ID Card", "Safety Hazard", "Lost and Found", "Security Concern", "Dining Service",
+          "Meal Plan", "Vending", "Billing", "Financial Aid"
+        ]},
+        {"type": "null"}
+      ]
+    },
+    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+    "summary": {"type": "string", "description": "One or two sentences describing only what is visible."},
+    "image_assessments": {
+      "type": "array",
+      "description": "Exactly one entry per provided image, image_index starting at 1.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image_index", "usable", "quality_problems", "description"],
+        "properties": {
+          "image_index": {"type": "integer"},
+          "usable": {"type": "boolean"},
+          "quality_problems": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["blurry", "too_dark", "overexposed", "obstructed", "too_small", "irrelevant_subject"]}
+          },
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Visible findings supporting the outcome, each tied to the image it is seen in.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image_index", "finding"],
+        "properties": {
+          "image_index": {"type": "integer"},
+          "finding": {"type": "string"}
+        }
+      }
+    },
+    "visible_hazards": {
+      "type": "array",
+      "items": {"type": "string", "enum": [
+        "fire_or_smoke", "active_water_leak_or_flooding", "exposed_wiring_or_sparking", "broken_glass",
+        "structural_damage", "trip_or_fall_hazard", "blocked_exit_or_egress", "dark_egress_route",
+        "person_in_distress_or_trapped"
+      ]}
+    },
+    "safety_escalation_suggested": {"type": "boolean"},
+    "visible_text": {
+      "type": "array",
+      "description": "Only text that is clearly legible in the photos, transcribed verbatim. Empty if none.",
+      "items": {"type": "string"}
+    },
+    "cross_image_consistency": {"type": "string", "enum": ["single_image", "consistent", "partially_consistent", "conflicting"]},
+    "uncertainties": {"type": "array", "items": {"type": "string"}}
+  }
+}

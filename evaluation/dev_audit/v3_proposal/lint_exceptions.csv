@@ -1,0 +1,4 @@
+case_id,rule,approval,unresolved_ref,justification
+CFB-0057,D5,PENDING,U-08,"Rodents repeatedly in dining storage: recurrence of pests in a food area is a health risk, which is material impact under D5. Proposed: keep HIGH. Lint cannot see food-safety impact."
+CFB-0059,D5,PENDING,U-08,"Pests returning daily to the same room means the infestation is unresolved. Proposed: keep HIGH, but this is the weakest D5 case outside the 30; approve or lower to MEDIUM."
+CFB-0214,D5,PENDING,U-08,"Tiny daily drip for two weeks: its own label_reason ('recurrence raises minor issue one level') encodes the v2 rule that D5 replaces. Proposed: keep MEDIUM only if prolonged water waste counts as material impact; otherwise LOW."

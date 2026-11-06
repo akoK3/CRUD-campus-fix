@@ -1,0 +1,6 @@
+# Test-only: run the database integration tests against a throwaway local PostgreSQL.
+# Install in a separate virtual environment, never in backend/.venv or production.
+# The end-to-end worker tests additionally need the backend requirements:
+#   pip install -r backend/requirements.txt -c backend/requirements.lock.txt
+pgserver==0.1.4
+psycopg[binary]==3.3.8

@@ -89,6 +89,8 @@ class Database:
         }
         self.reads = Counter()
         self.updates = []
+        self.rpc_calls = []
+        self.jobs = {}
         self.http = httpx.Client(transport=httpx.MockTransport(self.handle))
         self.client = create_client(
             project, "test-service-key", options=ClientOptions(httpx_client=self.http)
@@ -98,7 +100,111 @@ class Database:
     def ticket(self):
         return self.rows["tickets"][0]
 
+    # -- RPC test double ------------------------------------------------------
+    # Mirrors the contract of the SQL functions in
+    # supabase/migrations/20261105120000_ai_orchestration_safety.sql for these
+    # single-threaded tests. Leases, concurrency, and the human-decision guard are
+    # verified against real PostgreSQL in supabase/tests/local/.
+
+    def _job(self, ticket_id):
+        return self.jobs.setdefault(ticket_id, {
+            "token": None, "attempts": 0, "requester": 0, "staff": 0, "last_manual": None})
+
+    def _ticket_by_id(self, ticket_id):
+        return next((t for t in self.rows["tickets"] if t["ticket_id"] == ticket_id), None)
+
+    def _status(self, name):
+        return next(s["status_id"] for s in self.rows["statuses"] if s["name"] == name)
+
+    def _patch(self, ticket, update):
+        self.updates.append(("tickets", update))
+        ticket.update(update)
+
+    def rpc(self, name, params):
+        self.rpc_calls.append((name, params))
+        ticket = self._ticket_by_id(params["p_ticket_id"])
+        if ticket is None:
+            return {"claimed": False, "ok": False, "allowed": False, "reason": "not_found", "result": "NOT_FOUND"}
+        job = self._job(ticket["ticket_id"])
+        if name == "ai_claim_ticket":
+            allowed = ("PENDING", "FAILED") if params["p_allow_failed"] else ("PENDING",)
+            if ticket.get("deleted_at"):
+                return {"claimed": False, "reason": "withdrawn"}
+            if ticket["ai_routing_status"] not in allowed:
+                return {"claimed": False, "reason": "not_pending", "ai_routing_status": ticket["ai_routing_status"]}
+            if job["token"]:
+                return {"claimed": False, "reason": "in_progress"}
+            if job["attempts"] >= params["p_max_attempts"]:
+                self._patch(ticket, {"ai_routing_status": "FAILED"})
+                return {"claimed": False, "reason": "attempts_exhausted"}
+            job.update(token=f"token-{len(self.rpc_calls)}", attempts=job["attempts"] + 1)
+            return {"claimed": True, "claim_token": job["token"], "attempts": job["attempts"],
+                    "ticket": copy.deepcopy(ticket)}
+        if name == "ai_commit_classification":
+            if job["token"] != params["p_claim_token"]:
+                return {"result": "LEASE_LOST"}
+            job["token"] = None
+            outcome, emergency = params["p_outcome"], ticket.get("is_emergency")
+            active = {d["department_id"] for d in self.rows["departments"] if d.get("active")}
+            if outcome == "ROUTED" and params["p_department_id"] not in active:
+                outcome = "REVIEW"
+            if outcome == "FAILED":
+                update = {"ai_routing_status": "FAILED"}
+                if not emergency:
+                    update["status_id"] = self._status("NEEDS_REVIEW")
+                self._patch(ticket, update)
+                return {"result": "COMMITTED_FAILED", "outcome": outcome}
+            update = {
+                "ai_suggested_department_id": params["p_department_id"],
+                "ai_suggested_issue_type_id": params["p_issue_type_id"],
+                "ai_suggested_priority_id": params["p_priority_id"],
+                "ai_confidence": params["p_confidence"],
+            }
+            if outcome == "REVIEW":
+                update["ai_routing_status"] = "NEEDS_REVIEW"
+                if not emergency:
+                    update["status_id"] = self._status("NEEDS_REVIEW")
+                self._patch(ticket, update)
+                return {"result": "COMMITTED_NEEDS_REVIEW", "outcome": outcome}
+            update["ai_routing_status"] = "AUTO_ROUTED"
+            if params["p_issue_type_id"]:
+                update["issue_type_id"] = params["p_issue_type_id"]
+            if not emergency:
+                update.update(department_id=params["p_department_id"], priority_id=params["p_priority_id"],
+                              status_id=self._status("ASSIGNED"))
+            self._patch(ticket, update)
+            return {"result": "COMMITTED_AUTO_ROUTED", "outcome": outcome, "urgent_notifications": 0}
+        if name == "ai_release_claim":
+            released = job["token"] == params["p_claim_token"]
+            if released:
+                job["token"] = None
+            return released
+        if name == "ai_request_reclassification":
+            if job["token"]:
+                return {"ok": False, "reason": "in_progress"}
+            if ticket["ai_routing_status"] != "PENDING":
+                self._patch(ticket, {"ai_routing_status": "PENDING"})
+            job["attempts"] = 0
+            return {"ok": True}
+        if name == "ai_register_manual_request":
+            now = self.clock()
+            cooldown = params["p_cooldown_seconds"]
+            if job["last_manual"] is not None and job["last_manual"] + cooldown > now:
+                return {"allowed": False, "reason": "cooldown",
+                        "retry_after_seconds": max(1, int(job["last_manual"] + cooldown - now))}
+            if not params["p_is_staff"] and job["requester"] >= params["p_requester_limit"]:
+                return {"allowed": False, "reason": "limit_reached"}
+            job["staff" if params["p_is_staff"] else "requester"] += 1
+            job["last_manual"] = now
+            return {"allowed": True}
+        raise AssertionError(f"unexpected rpc {name}")
+
+    clock = staticmethod(lambda: 0.0)
+
     def handle(self, request):
+        if "/rpc/" in request.url.path:
+            name = request.url.path.rsplit("/", 1)[-1]
+            return httpx.Response(200, json=self.rpc(name, json.loads(request.content)))
         table = request.url.path.rsplit("/", 1)[-1]
         rows = self.rows[table]
         for key, expression in request.url.params.multi_items():
@@ -291,7 +397,9 @@ class RoutingAPITests(unittest.TestCase):
     def setUp(self):
         routing._REF_CACHE = None
         self.db = Database()
-        self.cfg = config()
+        # These tests classify the same ticket repeatedly on purpose; request
+        # limits have dedicated tests in ManualRequestLimitTests.
+        self.cfg = config(ai_manual_cooldown_seconds=0, ai_requester_manual_limit=100)
         self.caller = Caller("student-1", "student@caldwell.edu", "STUDENT", [])
         main.app.dependency_overrides.update({
             admin_client: lambda: self.db.client,
@@ -502,6 +610,151 @@ class PendingClassificationTests(unittest.IsolatedAsyncioTestCase):
         query.order.assert_called_once_with("created_at", desc=True)
         query.limit.assert_called_once_with(main.CLASSIFICATION_BATCH_SIZE)
         process.assert_called_once_with(334, admin, cfg)
+
+
+class ManualRequestLimitTests(unittest.TestCase):
+    """Server-enforced limits on user-triggered classification (audit F-4).
+
+    The limits themselves are enforced atomically in the database and verified
+    against real PostgreSQL in supabase/tests/local; these tests cover the API
+    contract: status codes, Retry-After, what consumes quota, and authorization.
+    """
+
+    def setUp(self):
+        routing._REF_CACHE = None
+        self.db = Database()
+        self.now = [1000.0]
+        self.db.clock = lambda: self.now[0]
+        self.cfg = config(ai_manual_cooldown_seconds=60, ai_requester_manual_limit=3)
+        self.caller = Caller("student-1", "student@caldwell.edu", "STUDENT", [])
+        main.app.dependency_overrides.update({
+            admin_client: lambda: self.db.client,
+            current_caller: lambda: self.caller,
+            get_settings: lambda: self.cfg,
+        })
+        self.addCleanup(main.app.dependency_overrides.clear)
+        self.addCleanup(self.db.http.close)
+        patches = [
+            patch.object(main, "settings", self.cfg),
+            patch.object(routing, "_classify_with_deepseek", side_effect=TimeoutError("model down")),
+            patch.object(main, "enrich_ticket", return_value=False),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.http = TestClient(main.app)
+
+    def post(self, path="/api/tickets/1/classify"):
+        return self.http.post(path)
+
+    def manual_calls(self):
+        return [p for name, p in self.db.rpc_calls if name == "ai_register_manual_request"]
+
+    def test_requester_retries_on_failed_ticket_are_capped(self):
+        statuses = []
+        for _ in range(5):
+            statuses.append(self.post().status_code)
+            self.now[0] += 61  # outside the cooldown each time
+        self.assertEqual(statuses, [200, 200, 200, 429, 429])
+        self.assertEqual(self.db.ticket["ai_routing_status"], "FAILED")
+        self.assertIn("limit", self.post().json()["detail"])
+        self.assertEqual(self.db.jobs[1]["requester"], 3)
+
+    def test_cooldown_returns_retry_after_and_does_not_consume_quota(self):
+        self.assertEqual(self.post().status_code, 200)
+        self.now[0] += 10
+        response = self.post()
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers["Retry-After"], "50")
+        self.assertEqual(self.db.jobs[1]["requester"], 1)
+
+    def test_already_classified_and_withdrawn_tickets_consume_nothing(self):
+        self.db.ticket["ai_routing_status"] = "AUTO_ROUTED"
+        self.assertEqual(self.post().json()["routing_status"], "AUTO_ROUTED")
+        self.db.ticket.update(ai_routing_status="PENDING", deleted_at="2026-11-05T10:00:00Z")
+        self.assertEqual(self.post().status_code, 409)
+        self.assertEqual(self.manual_calls(), [])
+        self.assertEqual([n for n, _ in self.db.rpc_calls if n == "ai_claim_ticket"], [])
+
+    def test_staff_reclassify_is_cooldown_limited_but_not_capped(self):
+        self.caller.role = "SYSTEM_ADMIN"
+        codes = []
+        for _ in range(5):
+            codes.append(self.post("/api/tickets/1/reclassify").status_code)
+            self.now[0] += 61
+        self.assertEqual(codes, [200] * 5)
+        self.assertEqual(self.post("/api/tickets/1/reclassify").status_code, 200)
+        self.assertEqual(self.post("/api/tickets/1/reclassify").status_code, 429)
+        self.assertTrue(all(p["p_is_staff"] for p in self.manual_calls()))
+
+    def test_unauthorized_callers_never_reach_the_limiter_or_model(self):
+        self.caller.user_id = "someone-else"
+        self.assertEqual(self.post().status_code, 404)
+        self.assertEqual(self.post("/api/tickets/1/reclassify").status_code, 403)
+        self.assertEqual(self.db.rpc_calls, [])
+
+
+class GuardedCommitHandlingTests(unittest.TestCase):
+    """The worker reacts safely to every commit outcome the database can return."""
+
+    def setUp(self):
+        routing._REF_CACHE = None
+        self.db = Database()
+        self.cfg = config()
+        self.model = patch.object(routing, "_classify_with_deepseek", return_value=("Plumbing", "URGENT"))
+        self.model.start()
+        self.addCleanup(self.model.stop)
+        self.enrich = patch.object(main, "enrich_ticket", return_value=True)
+        self.enrich_mock = self.enrich.start()
+        self.addCleanup(self.enrich.stop)
+        self.addCleanup(self.db.http.close)
+
+    def run_with_commit(self, result):
+        with patch.object(main.ai_jobs, "commit", return_value={"result": result}) as commit:
+            outcome = main._classify_pending_ticket(1, self.db.client, self.cfg)
+        return outcome, commit
+
+    def test_results_not_applied_never_enrich_or_write(self):
+        for result, expected in [("SUPERSEDED_BY_HUMAN", "OVERRIDDEN"), ("STALE_SNAPSHOT", "PENDING"),
+                                 ("LEASE_LOST", "PENDING"), ("WITHDRAWN", "PENDING"), ("ALREADY_FINAL", "PENDING")]:
+            with self.subTest(result=result):
+                self.db.jobs.clear()
+                outcome, commit = self.run_with_commit(result)
+                self.assertEqual(outcome.routing_status, expected)
+                self.assertEqual(commit.call_args.args[3], "ROUTED")
+                self.enrich_mock.assert_not_called()
+                self.assertEqual(self.db.updates, [])
+
+    def test_claim_refusals_do_not_call_the_model(self):
+        for reason, expected in [("in_progress", "PENDING"), ("superseded_by_human", "OVERRIDDEN"),
+                                 ("attempts_exhausted", "FAILED")]:
+            with self.subTest(reason=reason), \
+                    patch.object(main.ai_jobs, "claim", return_value={"claimed": False, "reason": reason}), \
+                    patch.object(main, "classify") as classify:
+                self.assertEqual(main._classify_pending_ticket(1, self.db.client, self.cfg).routing_status, expected)
+                classify.assert_not_called()
+        for reason, code in [("not_found", 404), ("withdrawn", 409)]:
+            with self.subTest(reason=reason), \
+                    patch.object(main.ai_jobs, "claim", return_value={"claimed": False, "reason": reason}):
+                with self.assertRaises(main.HTTPException) as ctx:
+                    main._classify_pending_ticket(1, self.db.client, self.cfg)
+                self.assertEqual(ctx.exception.status_code, code)
+
+    def test_commit_failure_releases_the_claim_and_reraises(self):
+        with patch.object(main.ai_jobs, "commit", side_effect=ConnectionError("db unreachable")):
+            with self.assertRaises(ConnectionError):
+                main._classify_pending_ticket(1, self.db.client, self.cfg)
+        releases = [p for n, p in self.db.rpc_calls if n == "ai_release_claim"]
+        self.assertEqual(len(releases), 1)
+        self.assertIn("db unreachable", releases[0]["p_error"])
+        self.assertIsNone(self.db.jobs[1]["token"])
+
+    def test_claim_uses_configured_lease_and_attempt_limit(self):
+        self.cfg.ollama_timeout_seconds = 90
+        self.cfg.ai_max_attempts = 5
+        main._classify_pending_ticket(1, self.db.client, self.cfg)
+        params = next(p for n, p in self.db.rpc_calls if n == "ai_claim_ticket")
+        self.assertEqual((params["p_lease_seconds"], params["p_max_attempts"], params["p_allow_failed"]), (150, 5, False))
 
 
 if __name__ == "__main__":

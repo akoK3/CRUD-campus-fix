@@ -13,7 +13,6 @@ endpoint re-checks access explicitly. See app/auth.py.
 
 import asyncio
 import logging
-import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -21,6 +20,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel
 from supabase import Client, create_client
 
+from . import ai_jobs
 from .auth import Caller, admin_client, assert_can_access_ticket, current_caller
 from .classify import classify
 from .config import Settings, get_settings
@@ -35,8 +35,6 @@ settings = get_settings()
 PENDING_CLASSIFICATION_DELAY = timedelta(seconds=5)
 CLASSIFICATION_CHECK_INTERVAL_SECONDS = 7
 CLASSIFICATION_BATCH_SIZE = 3
-_active_classifications: set[int] = set()
-_active_classifications_lock = threading.Lock()
 
 
 @asynccontextmanager
@@ -108,25 +106,45 @@ def dispatch_notifications(
     return DispatchResult(**dispatch_pending(admin, cfg))
 
 
-def _status_id(admin: Client, name: str) -> int | None:
-    row = admin.table("statuses").select("status_id").eq("name", name).maybe_single().execute()
-    return row.data["status_id"] if row and row.data else None
+# Outcomes of a commit that did not apply the model's result, as API responses.
+_NOT_APPLIED = {
+    ai_jobs.SUPERSEDED_BY_HUMAN: (
+        "OVERRIDDEN", "A staff member already routed this ticket; the AI result was kept as a suggestion only."),
+    ai_jobs.STALE_SNAPSHOT: (
+        "PENDING", "The ticket changed while it was being classified; it will be classified again."),
+    ai_jobs.LEASE_LOST: (
+        "PENDING", "Classification outlived its lease; the result was discarded and will be retried."),
+}
+
+# Claim refusals, as API responses (not_found and withdrawn are raised as errors).
+_NOT_CLAIMED = {
+    "in_progress": ("PENDING", "Classification is already in progress."),
+    "superseded_by_human": ("OVERRIDDEN", "A staff member already routed this ticket."),
+    "attempts_exhausted": ("FAILED", "Automatic classification failed repeatedly; routed for manual review."),
+}
 
 
-def _process_classification(ticket: dict, admin: Client, cfg: Settings) -> ClassifyResult:
+def _process_classification(
+    ticket: dict, admin: Client, cfg: Settings, claim_token: str
+) -> ClassifyResult:
+    """Classify a claimed ticket and commit through the database's guarded write.
+
+    The commit applies nothing if the lease was lost, a person has routed the
+    ticket, or the ticket changed since it was read. Every branch leaves the
+    ticket in a state a human can act on.
+    """
     ticket_id = ticket["ticket_id"]
     result = classify(ticket, admin, cfg)
 
     if result is None:
-        failure_update: dict = {"ai_routing_status": "FAILED"}
-        if not ticket.get("is_emergency"):
-            failure_update["status_id"] = _status_id(admin, "NEEDS_REVIEW")
-        admin.table("tickets").update(failure_update).eq("ticket_id", ticket_id).execute()
-        return ClassifyResult(
-            ticket_id=ticket_id,
-            routing_status="FAILED",
-            detail="Classifier unavailable; routed for manual review.",
-        )
+        committed = ai_jobs.commit(admin, ticket_id, claim_token, "FAILED")
+        if committed["result"] == ai_jobs.COMMITTED_FAILED:
+            return ClassifyResult(
+                ticket_id=ticket_id,
+                routing_status="FAILED",
+                detail="Classifier unavailable; routed for manual review.",
+            )
+        return _not_applied(ticket, committed)
 
     confident = (
         not result.needs_review
@@ -134,37 +152,28 @@ def _process_classification(ticket: dict, admin: Client, cfg: Settings) -> Class
         and result.confidence >= cfg.ai_confidence_threshold
         and result.department_id is not None
     )
+    committed = ai_jobs.commit(
+        admin,
+        ticket_id,
+        claim_token,
+        "ROUTED" if confident else "REVIEW",
+        department_id=result.department_id,
+        issue_type_id=result.issue_type_id,
+        priority_id=result.priority_id,
+        confidence=result.confidence,
+    )
+    outcome = committed["result"]
+    if outcome not in (ai_jobs.COMMITTED_AUTO_ROUTED, ai_jobs.COMMITTED_NEEDS_REVIEW):
+        return _not_applied(ticket, committed)
+    if committed.get("urgent_notifications"):
+        log.info("AI-URGENT ticket %s paged %s staff", ticket_id, committed["urgent_notifications"])
+    if committed.get("notification_error"):
+        log.warning("AI-URGENT notification failed for ticket %s: %s", ticket_id, committed["notification_error"])
 
-    update: dict = {
-        "ai_suggested_department_id": result.department_id,
-        "ai_suggested_issue_type_id": result.issue_type_id,
-        "ai_suggested_priority_id": result.priority_id,
-        "ai_confidence": round(result.confidence, 4),
-    }
-
-    if confident:
-        update["ai_routing_status"] = "AUTO_ROUTED"
-        update["department_id"] = result.department_id
-        update["priority_id"] = result.priority_id
-        if result.issue_type_id:
-            update["issue_type_id"] = result.issue_type_id
-        update["status_id"] = _status_id(admin, "ASSIGNED")
-    else:
-        update["ai_routing_status"] = "NEEDS_REVIEW"
-        update["status_id"] = _status_id(admin, "NEEDS_REVIEW")
-
-    # An emergency ticket is never re-routed away from Campus Safety by the
-    # model, regardless of what it suggested.
-    if ticket.get("is_emergency"):
-        update.pop("department_id", None)
-        update.pop("priority_id", None)
-        update.pop("status_id", None)
-
-    admin.table("tickets").update(update).eq("ticket_id", ticket_id).execute()
-
+    routed = outcome == ai_jobs.COMMITTED_AUTO_ROUTED
     # Writing enrichment is intentionally separate from routing. If it fails,
     # the classification above remains valid and the student's text is untouched.
-    if confident:
+    if routed:
         try:
             enrich_ticket(
                 ticket,
@@ -178,46 +187,55 @@ def _process_classification(ticket: dict, admin: Client, cfg: Settings) -> Class
 
     return ClassifyResult(
         ticket_id=ticket_id,
-        routing_status=update["ai_routing_status"],
+        routing_status="AUTO_ROUTED" if routed else "NEEDS_REVIEW",
         department_id=result.department_id,
         priority_id=result.priority_id,
         issue_type_id=result.issue_type_id,
         confidence=round(result.confidence, 4),
-        detail="Routed automatically." if confident else "Classification requires manual review.",
+        detail="Routed automatically." if routed else "Classification requires manual review.",
     )
 
 
-def _classify_pending_ticket(ticket_id: int, admin: Client, cfg: Settings) -> ClassifyResult:
-    with _active_classifications_lock:
-        if ticket_id in _active_classifications:
-            return ClassifyResult(
-                ticket_id=ticket_id,
-                routing_status="PENDING",
-                detail="Classification is already in progress.",
-            )
-        _active_classifications.add(ticket_id)
+def _not_applied(ticket: dict, committed: dict) -> ClassifyResult:
+    outcome = committed.get("result")
+    log.info("AI result for ticket %s not applied: %s", ticket["ticket_id"], outcome)
+    if outcome in _NOT_APPLIED:
+        routing_status, detail = _NOT_APPLIED[outcome]
+    else:  # WITHDRAWN, ALREADY_FINAL, NOT_FOUND
+        routing_status, detail = ticket.get("ai_routing_status", "PENDING"), f"Not applied ({outcome})."
+    return ClassifyResult(ticket_id=ticket["ticket_id"], routing_status=routing_status, detail=detail)
 
-    try:
-        response = (
-            admin.table("tickets")
-            .select("*")
-            .eq("ticket_id", ticket_id)
-            .maybe_single()
-            .execute()
-        )
-        ticket = response.data if response else None
-        if not ticket:
+
+def _classify_pending_ticket(
+    ticket_id: int, admin: Client, cfg: Settings, *, allow_failed: bool = False
+) -> ClassifyResult:
+    claimed = ai_jobs.claim(admin, ticket_id, cfg, allow_failed=allow_failed)
+    if not claimed.get("claimed"):
+        reason = claimed.get("reason")
+        if reason == "not_found":
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
-        if ticket["ai_routing_status"] not in ("PENDING", "FAILED"):
+        if reason == "withdrawn":
+            raise HTTPException(status.HTTP_409_CONFLICT, "Ticket was withdrawn")
+        if reason == "not_pending":
             return ClassifyResult(
                 ticket_id=ticket_id,
-                routing_status=ticket["ai_routing_status"],
+                routing_status=claimed.get("ai_routing_status", "PENDING"),
                 detail="Already classified.",
             )
-        return _process_classification(ticket, admin, cfg)
-    finally:
-        with _active_classifications_lock:
-            _active_classifications.discard(ticket_id)
+        routing_status, detail = _NOT_CLAIMED.get(reason, ("PENDING", f"Not claimed ({reason})."))
+        return ClassifyResult(ticket_id=ticket_id, routing_status=routing_status, detail=detail)
+
+    token = claimed["claim_token"]
+    try:
+        return _process_classification(claimed["ticket"], admin, cfg, token)
+    except Exception as exc:
+        # The lease would expire on its own; releasing it lets the next attempt
+        # start promptly. Releasing never applies a partial result.
+        try:
+            ai_jobs.release(admin, ticket_id, token, f"{type(exc).__name__}: {exc}")
+        except Exception:
+            log.exception("Could not release AI claim for ticket %s", ticket_id)
+        raise
 
 
 async def classification_loop(cfg: Settings) -> None:
@@ -257,21 +275,46 @@ def classify_ticket(
     admin: Client = Depends(admin_client),
     cfg: Settings = Depends(get_settings),
 ) -> ClassifyResult:
-    """Classify a ticket and route it.
+    """Classify a ticket and route it on request.
 
-    Called fire-and-forget by the client right after submission. Every branch
-    leaves the ticket in a state a human can act on.
+    The browser does not call this (the worker routes pending tickets); it is
+    for authorized manual requests. Every branch leaves the ticket in a state a
+    human can act on. Requests are rate-limited per ticket in the database.
     """
     ticket = assert_can_access_ticket(admin, caller, ticket_id)
+    if ticket.get("deleted_at"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ticket was withdrawn")
 
-    # Only the requester or staff may trigger this, and only once.
+    # Only the requester or staff may trigger this, and only while unrouted.
+    # Checked before the rate limit so a no-op request costs nothing.
     if ticket["ai_routing_status"] not in ("PENDING", "FAILED"):
         return ClassifyResult(
             ticket_id=ticket_id,
             routing_status=ticket["ai_routing_status"],
             detail="Already classified.",
         )
-    return _classify_pending_ticket(ticket_id, admin, cfg)
+    _enforce_manual_limit(admin, ticket_id, caller, cfg)
+    return _classify_pending_ticket(ticket_id, admin, cfg, allow_failed=True)
+
+
+def _enforce_manual_limit(admin: Client, ticket_id: int, caller: Caller, cfg: Settings) -> None:
+    decision = ai_jobs.register_manual_request(admin, ticket_id, is_staff=caller.is_staff, cfg=cfg)
+    if decision.get("allowed"):
+        return
+    reason = decision.get("reason")
+    if reason == "not_found":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
+    if reason == "cooldown":
+        retry_after = str(decision.get("retry_after_seconds", cfg.ai_manual_cooldown_seconds))
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Classification was requested recently for this ticket. Try again shortly.",
+            headers={"Retry-After": retry_after},
+        )
+    raise HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        "The limit of classification requests for this ticket has been reached; staff will review it.",
+    )
 
 
 @app.post("/api/tickets/{ticket_id}/reclassify", response_model=ClassifyResult)
@@ -281,12 +324,28 @@ def reclassify_ticket(
     admin: Client = Depends(admin_client),
     cfg: Settings = Depends(get_settings),
 ) -> ClassifyResult:
-    """Staff-only re-run, for a ticket that failed or was misrouted."""
+    """Staff-only re-run, for a ticket that failed or was misrouted.
+
+    The request becomes the new baseline: earlier routing decisions no longer
+    block the AI, but anything a person does after this request still does, and
+    a ticket that is already being worked on is never re-routed.
+    """
     if not caller.is_staff:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Staff only")
 
-    assert_can_access_ticket(admin, caller, ticket_id)
-    admin.table("tickets").update({"ai_routing_status": "PENDING"}).eq(
-        "ticket_id", ticket_id
-    ).execute()
-    return classify_ticket(ticket_id, caller, admin, cfg)
+    ticket = assert_can_access_ticket(admin, caller, ticket_id)
+    if ticket.get("deleted_at"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ticket was withdrawn")
+    _enforce_manual_limit(admin, ticket_id, caller, cfg)
+
+    requested = ai_jobs.request_reclassification(admin, ticket_id, caller.user_id)
+    if not requested.get("ok"):
+        reason = requested.get("reason")
+        if reason == "not_found":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
+        if reason == "withdrawn":
+            raise HTTPException(status.HTTP_409_CONFLICT, "Ticket was withdrawn")
+        return ClassifyResult(
+            ticket_id=ticket_id, routing_status="PENDING", detail="Classification is already in progress."
+        )
+    return _classify_pending_ticket(ticket_id, admin, cfg)

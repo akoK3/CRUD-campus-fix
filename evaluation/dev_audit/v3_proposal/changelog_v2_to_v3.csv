@@ -1,0 +1,60 @@
+case_id,field,v2_value,proposed_v3_value,change_type,decision,approval,policy_refs,confidence,unresolved_ref
+CFB-0021,expected_priority,HIGH,URGENT,label,CHANGE,PENDING,D8;R-PRI-URG,Medium,U-04
+CFB-0021,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D8;R-PRI-URG,Medium,U-04
+CFB-0233,safety_escalation,(new field),true,annotation,ANNOTATE,PENDING,D8,High,
+CFB-0033,(none),,,reviewed-no-change,UNRESOLVED,PENDING,R-PRI-SEC,Low,U-05
+CFB-0111,(none),,,reviewed-no-change,UNRESOLVED,PENDING,R-PRI-SEC;R-SAF-4,Low,U-06
+CFB-0158,expected_priority,MEDIUM,HIGH,label,CHANGE,PENDING,R-PRI-SEC,High,
+CFB-0248,(none),,,reviewed-no-change,UNRESOLVED,PENDING,D1,Medium,U-03
+CFB-0100,expected_priority,URGENT,HIGH,label,CHANGE,PENDING,D1,Low,U-01
+CFB-0130,(none),,,reviewed-no-change,KEEP,PENDING,D1,Medium,
+CFB-0172,(none),,,reviewed-no-change,KEEP,PENDING,D1,High,
+CFB-0235,(none),,,reviewed-no-change,KEEP,PENDING,D1,High,
+CFB-0184,(none),,,reviewed-no-change,KEEP,PENDING,D1,High,
+CFB-0190,(none),,,reviewed-no-change,KEEP,PENDING,D1,Medium,U-02
+CFB-0246,(none),,,reviewed-no-change,KEEP,PENDING,D1,High,
+CFB-0063,accessibility_escalation,(new field),true,annotation,ANNOTATE,PENDING,D9,Medium,
+CFB-0065,accessibility_escalation,(new field),true,annotation,ANNOTATE,PENDING,D9,Medium,
+CFB-0017,expected_priority,HIGH,MEDIUM,label,CHANGE,PENDING,D5;R-PRI-BASE,Medium,
+CFB-0029,expected_priority,MEDIUM,LOW,label,CHANGE,PENDING,R-PRI-BASE,Medium,
+CFB-0119,expected_priority,HIGH,MEDIUM,label,CHANGE,PENDING,D5,Low,U-07
+CFB-0167,(none),,,reviewed-no-change,KEEP,PENDING,D5,Medium,
+CFB-0205,expected_issue_type,Other,Security Concern,label,CHANGE,PENDING,D2;D4,Medium,U-13
+CFB-0205,expected_department,Other / Review,Campus Safety,label,CHANGE,PENDING,D2;D4,Medium,U-13
+CFB-0205,expected_priority,NEEDS_REVIEW,URGENT,label,CHANGE,PENDING,D2;D4,Medium,U-13
+CFB-0205,expected_action,NEEDS_REVIEW,AUTO_ROUTE,label,CHANGE,PENDING,D2;D4,Medium,U-13
+CFB-0205,secondary_issue_type,(new field),Laundry,annotation,CHANGE,PENDING,D2;D4,Medium,U-13
+CFB-0205,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D2;D4,Medium,U-13
+CFB-0207,expected_issue_type,Other,Plumbing,label,CHANGE,PENDING,D2,Medium,U-13
+CFB-0207,expected_department,Other / Review,Facilities,label,CHANGE,PENDING,D2,Medium,U-13
+CFB-0207,expected_priority,NEEDS_REVIEW,URGENT,label,CHANGE,PENDING,D2,Medium,U-13
+CFB-0207,expected_action,NEEDS_REVIEW,AUTO_ROUTE,label,CHANGE,PENDING,D2,Medium,U-13
+CFB-0207,secondary_issue_type,(new field),Wi-Fi / Network,annotation,CHANGE,PENDING,D2,Medium,U-13
+CFB-0207,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D2,Medium,U-13
+CFB-0112,expected_issue_type,Housing / Roommate,Security Concern,label,CHANGE,PENDING,D4,High,
+CFB-0112,expected_department,Residence Life,Campus Safety,label,CHANGE,PENDING,D4,High,
+CFB-0112,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D4,High,
+CFB-0154,expected_issue_type,Lost and Found,Security Concern,label,CHANGE,PENDING,D4;R-ISS-SEC,Medium,U-09
+CFB-0154,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D4;R-ISS-SEC,Medium,U-09
+CFB-0142,expected_issue_type,ID Card,Security Concern,label,CHANGE,PENDING,D4;R-ISS-SEC,Low,U-09
+CFB-0142,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D4;R-ISS-SEC,Low,U-09
+CFB-0136,safety_escalation,(new field),true,annotation,UNRESOLVED,PENDING,R-ISS-PARK,Low,U-10
+CFB-0236,expected_issue_type,Furniture,Residence Maintenance,label,CHANGE,PENDING,D3,Medium,
+CFB-0236,expected_department,Facilities,Residence Life,label,CHANGE,PENDING,D3,Medium,
+CFB-0192,(none),,,reviewed-no-change,UNRESOLVED,PENDING,R-ISS-FIN,Low,U-10
+CFB-0178,expected_department,IT,Facilities,label,CHANGE,PENDING,D6,Medium,U-11
+CFB-0178,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D6,Medium,U-11
+CFB-0118,expected_department,Residence Life,Facilities,label,CHANGE,PENDING,D6,Medium,U-11
+CFB-0118,safety_escalation,(new field),true,annotation,CHANGE,PENDING,D6,Medium,U-11
+CFB-0203,review_reason,(new field),insufficient_detail,annotation,ANNOTATE,PENDING,D7,Medium,U-12
+CFB-0193,review_reason,(new field),no_matching_category,annotation,ANNOTATE,PENDING,R-REV-2,High,
+CFB-0194,review_reason,(new field),no_matching_category,annotation,ANNOTATE,PENDING,R-REV-2,High,
+CFB-0195,noise_type,recurrence/context,none,metadata,ANNOTATE,PENDING,R-REV-2,Medium,
+CFB-0195,review_reason,(new field),no_matching_category,annotation,ANNOTATE,PENDING,R-REV-2,Medium,
+CFB-0196,noise_type,safety/scope,none,metadata,ANNOTATE,PENDING,R-REV-2,Medium,
+CFB-0196,review_reason,(new field),no_matching_category,annotation,ANNOTATE,PENDING,R-REV-2,Medium,
+CFB-0198,noise_type,sentiment/adversarial,none,metadata,ANNOTATE,PENDING,R-REV-2,Low,
+CFB-0198,review_reason,(new field),no_matching_category,annotation,ANNOTATE,PENDING,R-REV-2,Low,
+CFB-0204,review_reason,(new field),multiple_issues,annotation,ANNOTATE,PENDING,D2;R-REV-2,High,
+CFB-0206,review_reason,(new field),multiple_issues,annotation,ANNOTATE,PENDING,D2;R-REV-2,High,
+CFB-0208,review_reason,(new field),multiple_issues,annotation,ANNOTATE,PENDING,D2;R-REV-2,High,

@@ -1,0 +1,5 @@
+# Only for `run_vision_eval.py --live`. Install in a separate environment, never in backend/.venv:
+# the production backend deliberately does not depend on the Anthropic SDK
+# (backend/tests/test_routing.py asserts it is not imported).
+# Pin the exact version after the first install (pip freeze), then commit the pin.
+anthropic
